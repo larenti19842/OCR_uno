@@ -641,11 +641,17 @@
             const formData = new FormData();
             formData.append('file', file);
 
+            let buffer = '';
             try {
                 const response = await fetch('/process', {
                     method: 'POST',
                     body: formData
                 });
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(errorText || `Error ${response.status}`);
+                }
 
                 const reader = response.body.getReader();
                 const decoder = new TextDecoder();
@@ -654,22 +660,33 @@
                     const { done, value } = await reader.read();
                     if (done) break;
 
-                    const text = decoder.decode(value);
-                    const lines = text.split('\n');
+                    // Decodificar el chunk y añadirlo al buffer
+                    buffer += decoder.decode(value, { stream: true });
+
+                    // Procesar líneas completas en el buffer
+                    const lines = buffer.split('\n');
+
+                    // La última parte puede estar incompleta, la dejamos en el buffer
+                    buffer = lines.pop();
 
                     for (const line of lines) {
-                        if (line.startsWith('data: ')) {
+                        const trimmedLine = line.trim();
+                        if (trimmedLine.startsWith('data: ')) {
                             try {
-                                const data = JSON.parse(line.substring(6));
-                                handleProgress(data);
+                                const jsonStr = trimmedLine.substring(6).trim();
+                                if (jsonStr) {
+                                    const data = JSON.parse(jsonStr);
+                                    handleProgress(data);
+                                }
                             } catch (e) {
-                                console.error('Parse error:', e);
+                                console.error('Error parseando JSON de stream:', e, 'Línea:', trimmedLine);
                             }
                         }
                     }
                 }
             } catch (err) {
                 stopLocalTimer();
+                console.error('Stream error:', err);
                 alert('Error processing: ' + err.message);
                 dropZone.style.display = 'block';
                 loader.style.display = 'none';
