@@ -44,11 +44,10 @@ def optimize_image(image_bytes):
     # 4. Reducción de ruido (Median Filter - preserva bordes)
     img = img.filter(ImageFilter.MedianFilter(size=3))
     
-    # 5. Normalización de brillo (auto-levels) usando tobytes
-    img_data = list(img.tobytes())
-    if img_data:
-        min_val = min(img_data)
-        max_val = max(img_data)
+    # 5. Normalización de brillo (auto-levels)
+    extrema = img.getextrema()
+    if extrema:
+        min_val, max_val = extrema
         if max_val > min_val:
             scale = 255.0 / (max_val - min_val)
             offset = -min_val * scale
@@ -79,6 +78,12 @@ def process_invoice():
     if file.filename == '':
         return jsonify({"error": "No se seleccionó ningún archivo"}), 400
 
+    # Leer el archivo ANTES del generador para evitar error de archivo cerrado
+    try:
+        image_bytes = file.read()
+    except Exception as e:
+        return jsonify({"error": f"Error al leer el archivo: {str(e)}"}), 500
+        
     def generate():
         start_time = time.time()
         
@@ -86,8 +91,7 @@ def process_invoice():
             # Fase 1: Optimización de imagen
             yield f"data: {json.dumps({'phase': 'optimizing', 'message': 'Optimizando imagen...', 'elapsed': 0})}\n\n"
             
-            image_data = file.read()
-            optimized_data = optimize_image(image_data)
+            optimized_data = optimize_image(image_bytes)
             image_size_kb = len(optimized_data) / 1024
             
             elapsed = round(time.time() - start_time, 1)
