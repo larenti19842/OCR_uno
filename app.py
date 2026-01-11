@@ -15,35 +15,53 @@ MODEL_NAME = "ministral-facturador-full"
 
 def optimize_image(image_bytes):
     """
-    Optimiza la imagen según los requerimientos:
-    - Ancho máximo 700px (manteniendo proporción)
+    Optimiza la imagen para OCR preservando tamaño bajo:
+    - Ancho máximo 800px (mejor legibilidad)
     - Escala de grises
-    - Contraste +15%
-    - Sharpen para mejorar bordes de texto
-    - Formato JPEG calidad 93%
+    - Reducción de ruido (Median Filter)
+    - Normalización de brillo
+    - Contraste mejorado
+    - Unsharp Mask para bordes de texto nítidos
+    - Formato JPEG calidad 85% (balance calidad/tamaño)
     """
     img = Image.open(io.BytesIO(image_bytes))
     
-    # 1. Redimensionar (Max width 700px)
-    max_width = 700
+    # 1. Convertir a RGB si es necesario (para manejar PNGs con alpha)
+    if img.mode in ('RGBA', 'P'):
+        img = img.convert('RGB')
+    
+    # 2. Redimensionar (Max width 800px para mejor legibilidad)
+    max_width = 800
     if img.width > max_width:
         ratio = max_width / float(img.width)
         new_height = int(float(img.height) * float(ratio))
         img = img.resize((max_width, new_height), Image.Resampling.LANCZOS)
     
-    # 2. Escala de grises
+    # 3. Escala de grises
     img = img.convert('L')
     
-    # 3. Contraste +15%
+    # 4. Reducción de ruido (Median Filter - preserva bordes)
+    img = img.filter(ImageFilter.MedianFilter(size=3))
+    
+    # 5. Normalización de brillo (auto-levels)
+    min_val = min(img.getdata())
+    max_val = max(img.getdata())
+    if max_val > min_val:
+        scale = 255.0 / (max_val - min_val)
+        offset = -min_val * scale
+        img = img.point(lambda x: int(x * scale + offset))
+    
+    # 6. Contraste mejorado (+20%)
     enhancer = ImageEnhance.Contrast(img)
-    img = enhancer.enhance(1.15)
+    img = enhancer.enhance(1.20)
     
-    # 4. Sharpen (Filtro de nitidez)
-    img = img.filter(ImageFilter.SHARPEN)
+    # 7. Unsharp Mask (mejor que SHARPEN para texto)
+    # radius=2, percent=150, threshold=3
+    img = img.filter(ImageFilter.UnsharpMask(radius=2, percent=150, threshold=3))
     
-    # 5. Guardar en memoria como JPEG calidad 93%
+    # 8. Guardar como JPEG calidad 85% (buen balance)
     buffer = io.BytesIO()
-    img.save(buffer, format="JPEG", quality=93)
+    img.save(buffer, format="JPEG", quality=85, optimize=True)
     return buffer.getvalue()
 
 @app.route('/')
