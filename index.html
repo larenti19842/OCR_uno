@@ -16,6 +16,8 @@
             --text-muted: #94a3b8;
             --border: rgba(255, 255, 255, 0.1);
             --accent: #22d3ee;
+            --success: #10b981;
+            --warning: #f59e0b;
         }
 
         * {
@@ -99,26 +101,128 @@
             display: none;
         }
 
-        /* Loader */
+        /* Loader with Progress */
         .loader-container {
             display: none;
             margin-top: 2rem;
-            text-align: center;
+        }
+
+        .progress-card {
+            background: var(--card-bg);
+            border-radius: 1.5rem;
+            padding: 2rem;
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--border);
+        }
+
+        .progress-header {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
         }
 
         .spinner {
-            width: 50px;
-            height: 50px;
+            width: 40px;
+            height: 40px;
             border: 4px solid rgba(255, 255, 255, 0.1);
             border-left-color: var(--primary);
             border-radius: 50%;
             animation: spin 1s linear infinite;
-            margin: 0 auto 1rem;
         }
 
         @keyframes spin {
             to {
                 transform: rotate(360deg);
+            }
+        }
+
+        .progress-title {
+            font-size: 1.2rem;
+            font-weight: 600;
+        }
+
+        .progress-stats {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .stat-box {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 1rem;
+            border-radius: 0.75rem;
+            text-align: center;
+        }
+
+        .stat-label {
+            color: var(--text-muted);
+            font-size: 0.8rem;
+            margin-bottom: 0.25rem;
+        }
+
+        .stat-value {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: var(--accent);
+        }
+
+        .progress-phases {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .phase-item {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.5rem;
+            border-radius: 0.5rem;
+            color: var(--text-muted);
+            transition: all 0.3s ease;
+        }
+
+        .phase-item.active {
+            background: rgba(99, 102, 241, 0.2);
+            color: var(--text-main);
+        }
+
+        .phase-item.complete {
+            color: var(--success);
+        }
+
+        .phase-icon {
+            width: 24px;
+            height: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .phase-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: currentColor;
+        }
+
+        .phase-item.active .phase-dot {
+            animation: pulse 1s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+
+            0%,
+            100% {
+                transform: scale(1);
+                opacity: 1;
+            }
+
+            50% {
+                transform: scale(1.5);
+                opacity: 0.5;
             }
         }
 
@@ -148,6 +252,32 @@
             backdrop-filter: blur(12px);
             border: 1px solid var(--border);
             margin-bottom: 2rem;
+        }
+
+        .success-banner {
+            background: linear-gradient(135deg, rgba(16, 185, 129, 0.2), rgba(34, 211, 238, 0.2));
+            border: 1px solid var(--success);
+            border-radius: 1rem;
+            padding: 1rem 1.5rem;
+            margin-bottom: 1.5rem;
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .success-banner .icon {
+            font-size: 1.5rem;
+        }
+
+        .success-banner .text {
+            color: var(--success);
+            font-weight: 600;
+        }
+
+        .success-banner .details {
+            color: var(--text-muted);
+            font-size: 0.9rem;
+            margin-left: auto;
         }
 
         h2 {
@@ -279,6 +409,10 @@
                 padding: 0.5rem;
                 font-size: 0.9rem;
             }
+
+            .progress-stats {
+                grid-template-columns: 1fr;
+            }
         }
     </style>
 </head>
@@ -298,12 +432,64 @@
         </div>
 
         <div id="loader" class="loader-container">
-            <div class="spinner"></div>
-            <p id="loaderText">Optimizando imagen y procesando con Ollama...</p>
+            <div class="progress-card">
+                <div class="progress-header">
+                    <div class="spinner"></div>
+                    <span class="progress-title" id="progressTitle">Procesando factura...</span>
+                </div>
+
+                <div class="progress-stats">
+                    <div class="stat-box">
+                        <div class="stat-label">Tiempo</div>
+                        <div class="stat-value" id="statTime">0.0s</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-label">Tokens</div>
+                        <div class="stat-value" id="statTokens">0</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-label">Velocidad</div>
+                        <div class="stat-value" id="statSpeed">-- t/s</div>
+                    </div>
+                </div>
+
+                <div class="progress-phases">
+                    <div class="phase-item" id="phaseOptimize">
+                        <div class="phase-icon">
+                            <div class="phase-dot"></div>
+                        </div>
+                        <span>Optimizando imagen</span>
+                    </div>
+                    <div class="phase-item" id="phaseSend">
+                        <div class="phase-icon">
+                            <div class="phase-dot"></div>
+                        </div>
+                        <span>Enviando a Ollama</span>
+                    </div>
+                    <div class="phase-item" id="phaseGenerate">
+                        <div class="phase-icon">
+                            <div class="phase-dot"></div>
+                        </div>
+                        <span>Generando respuesta (CPU)</span>
+                    </div>
+                    <div class="phase-item" id="phaseComplete">
+                        <div class="phase-icon">
+                            <div class="phase-dot"></div>
+                        </div>
+                        <span>Completado</span>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <div id="results" class="results-container">
             <div class="card">
+                <div class="success-banner" id="successBanner">
+                    <span class="icon">✅</span>
+                    <span class="text">Procesamiento completado</span>
+                    <span class="details" id="processingDetails"></span>
+                </div>
+
                 <h2>Detalle de Ítems</h2>
                 <div style="overflow-x: auto;">
                     <table id="itemsTable">
@@ -361,7 +547,23 @@
         const rawJson = document.getElementById('rawJson');
         const itemsTableBody = document.querySelector('#itemsTable tbody');
 
+        // Progress elements
+        const progressTitle = document.getElementById('progressTitle');
+        const statTime = document.getElementById('statTime');
+        const statTokens = document.getElementById('statTokens');
+        const statSpeed = document.getElementById('statSpeed');
+        const processingDetails = document.getElementById('processingDetails');
+
+        const phases = {
+            optimize: document.getElementById('phaseOptimize'),
+            send: document.getElementById('phaseSend'),
+            generate: document.getElementById('phaseGenerate'),
+            complete: document.getElementById('phaseComplete')
+        };
+
         let currentData = null;
+        let localTimer = null;
+        let localElapsed = 0;
 
         // Eventos Drag & Drop
         dropZone.addEventListener('click', () => fileInput.click());
@@ -387,6 +589,39 @@
             if (file) handleFile(file);
         });
 
+        function resetPhases() {
+            Object.values(phases).forEach(p => {
+                p.classList.remove('active', 'complete');
+            });
+        }
+
+        function setPhase(phaseKey, isComplete = false) {
+            const phase = phases[phaseKey];
+            if (phase) {
+                if (isComplete) {
+                    phase.classList.remove('active');
+                    phase.classList.add('complete');
+                } else {
+                    phase.classList.add('active');
+                }
+            }
+        }
+
+        function startLocalTimer() {
+            localElapsed = 0;
+            localTimer = setInterval(() => {
+                localElapsed += 0.1;
+                statTime.textContent = `${localElapsed.toFixed(1)}s`;
+            }, 100);
+        }
+
+        function stopLocalTimer() {
+            if (localTimer) {
+                clearInterval(localTimer);
+                localTimer = null;
+            }
+        }
+
         async function handleFile(file) {
             if (!file.type.startsWith('image/')) {
                 alert('Por favor sube una imagen válida.');
@@ -397,6 +632,11 @@
             dropZone.style.display = 'none';
             loader.style.display = 'block';
             results.style.display = 'none';
+            resetPhases();
+            statTokens.textContent = '0';
+            statSpeed.textContent = '-- t/s';
+
+            startLocalTimer();
 
             const formData = new FormData();
             formData.append('file', file);
@@ -407,18 +647,80 @@
                     body: formData
                 });
 
-                if (!response.ok) {
-                    const error = await response.json();
-                    throw new Error(error.error || 'Error en el servidor');
-                }
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
 
-                const data = await response.json();
-                currentData = data;
-                displayResults(data);
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+
+                    const text = decoder.decode(value);
+                    const lines = text.split('\n');
+
+                    for (const line of lines) {
+                        if (line.startsWith('data: ')) {
+                            try {
+                                const data = JSON.parse(line.substring(6));
+                                handleProgress(data);
+                            } catch (e) {
+                                console.error('Parse error:', e);
+                            }
+                        }
+                    }
+                }
             } catch (err) {
+                stopLocalTimer();
                 alert('Error processing: ' + err.message);
                 dropZone.style.display = 'block';
                 loader.style.display = 'none';
+            }
+        }
+
+        function handleProgress(data) {
+            progressTitle.textContent = data.message || 'Procesando...';
+
+            if (data.elapsed) {
+                statTime.textContent = `${data.elapsed}s`;
+            }
+
+            if (data.tokens !== undefined) {
+                statTokens.textContent = data.tokens;
+            }
+
+            if (data.tokens_per_sec !== undefined) {
+                statSpeed.textContent = `${data.tokens_per_sec} t/s`;
+            }
+
+            switch (data.phase) {
+                case 'optimizing':
+                    setPhase('optimize');
+                    break;
+                case 'optimized':
+                    setPhase('optimize', true);
+                    break;
+                case 'sending':
+                    setPhase('send');
+                    break;
+                case 'generating':
+                    setPhase('send', true);
+                    setPhase('generate');
+                    break;
+                case 'complete':
+                    stopLocalTimer();
+                    setPhase('generate', true);
+                    setPhase('complete', true);
+                    if (data.result) {
+                        currentData = data.result;
+                        processingDetails.textContent = `${data.elapsed}s | ${data.tokens} tokens`;
+                        displayResults(data.result);
+                    }
+                    break;
+                case 'error':
+                    stopLocalTimer();
+                    alert('Error: ' + data.message);
+                    dropZone.style.display = 'block';
+                    loader.style.display = 'none';
+                    break;
             }
         }
 
