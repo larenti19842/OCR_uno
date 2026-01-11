@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Invoice OCR Pro - Ollama</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #6366f1;
+            --primary-dark: #4f46e5;
+            --bg: #0f172a;
+            --card-bg: rgba(30, 41, 59, 0.7);
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --border: rgba(255, 255, 255, 0.1);
+            --accent: #22d3ee;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Outfit', sans-serif;
+        }
+
+        body {
+            background: var(--bg);
+            background-image: 
+                radial-gradient(circle at 0% 0%, rgba(99, 102, 241, 0.15) 0%, transparent 50%),
+                radial-gradient(circle at 100% 100%, rgba(34, 211, 238, 0.15) 0%, transparent 50%);
+            color: var(--text-main);
+            min-height: 100vh;
+            padding: 2rem;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .container {
+            max-width: 1000px;
+            width: 100%;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 3rem;
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            font-weight: 600;
+            background: linear-gradient(to right, #818cf8, #22d3ee);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 0.5rem;
+        }
+
+        .subtitle {
+            color: var(--text-muted);
+            font-size: 1.1rem;
+        }
+
+        /* Drag & Drop Zone */
+        .drop-zone {
+            background: var(--card-bg);
+            border: 2px dashed var(--border);
+            border-radius: 1.5rem;
+            padding: 3rem;
+            text-align: center;
+            backdrop-filter: blur(12px);
+            transition: all 0.3s ease;
+            cursor: pointer;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .drop-zone:hover, .drop-zone.dragover {
+            border-color: var(--primary);
+            background: rgba(30, 41, 59, 0.9);
+            transform: translateY(-2px);
+        }
+
+        .drop-zone p {
+            color: var(--text-muted);
+            font-size: 1.2rem;
+        }
+
+        .drop-zone .icon {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+            display: block;
+        }
+
+        #fileInput {
+            display: none;
+        }
+
+        /* Loader */
+        .loader-container {
+            display: none;
+            margin-top: 2rem;
+            text-align: center;
+        }
+
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 4px solid rgba(255, 255, 255, 0.1);
+            border-left-color: var(--primary);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 1rem;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Results */
+        .results-container {
+            display: none;
+            margin-top: 3rem;
+            animation: fadeIn 0.5s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .card {
+            background: var(--card-bg);
+            border-radius: 1.5rem;
+            padding: 2rem;
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--border);
+            margin-bottom: 2rem;
+        }
+
+        h2 {
+            font-size: 1.5rem;
+            margin-bottom: 1.5rem;
+            color: var(--accent);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 1.5rem;
+        }
+
+        th, td {
+            text-align: left;
+            padding: 1rem;
+            border-bottom: 1px solid var(--border);
+        }
+
+        th {
+            color: var(--text-muted);
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 0.85rem;
+        }
+
+        .totales-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1.5rem;
+        }
+
+        .total-item {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 1.5rem;
+            border-radius: 1rem;
+            text-align: center;
+        }
+
+        .total-item span {
+            display: block;
+            color: var(--text-muted);
+            font-size: 0.9rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .total-item strong {
+            font-size: 1.5rem;
+            color: var(--text-main);
+        }
+
+        .highlight-total {
+            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+        }
+
+        /* Actions */
+        .actions {
+            display: flex;
+            gap: 1rem;
+            margin-top: 2rem;
+        }
+
+        button {
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 0.8rem 1.5rem;
+            border-radius: 0.75rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        button:hover {
+            background: var(--primary-dark);
+            transform: scale(1.05);
+        }
+
+        button.secondary {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        button.secondary:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        /* JSON Preview */
+        details {
+            margin-top: 2rem;
+            cursor: pointer;
+        }
+
+        summary {
+            color: var(--text-muted);
+            margin-bottom: 1rem;
+            font-weight: 600;
+        }
+
+        pre {
+            background: #000;
+            padding: 1.5rem;
+            border-radius: 1rem;
+            font-size: 0.9rem;
+            overflow-x: auto;
+            color: #10b981;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            body { padding: 1rem; }
+            h1 { font-size: 2rem; }
+            .drop-zone { padding: 2rem; }
+            th, td { padding: 0.5rem; font-size: 0.9rem; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <header>
+            <h1>Invoice OCR Pro</h1>
+            <p class="subtitle">Potenciado por Ollama & AI Local</p>
+        </header>
+
+        <div id="dropZone" class="drop-zone">
+            <span class="icon">📄</span>
+            <p>Arrastra tu factura aquí o haz clic para subir</p>
+            <input type="file" id="fileInput" accept="image/*">
+        </div>
+
+        <div id="loader" class="loader-container">
+            <div class="spinner"></div>
+            <p id="loaderText">Optimizando imagen y procesando con Ollama...</p>
+        </div>
+
+        <div id="results" class="results-container">
+            <div class="card">
+                <h2>Detalle de Ítems</h2>
+                <div style="overflow-x: auto;">
+                    <table id="itemsTable">
+                        <thead>
+                            <tr>
+                                <th>Descripción</th>
+                                <th>Cantidad</th>
+                                <th>P. Unitario</th>
+                                <th>Subtotal</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Se llena dinámicamente -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="totales-grid">
+                    <div class="total-item">
+                        <span>Subtotal Neto</span>
+                        <strong id="totalSubtotal">$0.00</strong>
+                    </div>
+                    <div class="total-item">
+                        <span>Otros Tributos</span>
+                        <strong id="totalTributos">$0.00</strong>
+                    </div>
+                    <div class="total-item highlight-total">
+                        <span>Total Final</span>
+                        <strong id="totalFinal">$0.00</strong>
+                    </div>
+                </div>
+
+                <div class="actions">
+                    <button id="exportCsv">
+                        <span>📥</span> Exportar CSV
+                    </button>
+                    <button class="secondary" onclick="location.reload()">
+                        <span>🔄</span> Nueva Factura
+                    </button>
+                </div>
+            </div>
+
+            <details>
+                <summary>Ver JSON Crudo</summary>
+                <pre id="rawJson"></pre>
+            </details>
+        </div>
+    </div>
+
+    <script>
+        const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('fileInput');
+        const loader = document.getElementById('loader');
+        const results = document.getElementById('results');
+        const rawJson = document.getElementById('rawJson');
+        const itemsTableBody = document.querySelector('#itemsTable tbody');
+        
+        let currentData = null;
+
+        // Eventos Drag & Drop
+        dropZone.addEventListener('click', () => fileInput.click());
+        
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('dragover');
+        });
+
+        dropZone.addEventListener('dragleave', () => {
+            dropZone.classList.remove('dragover');
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('dragover');
+            const file = e.dataTransfer.files[0];
+            if (file) handleFile(file);
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) handleFile(file);
+        });
+
+        async function handleFile(file) {
+            if (!file.type.startsWith('image/')) {
+                alert('Por favor sube una imagen válida.');
+                return;
+            }
+
+            // UI State
+            dropZone.style.display = 'none';
+            loader.style.display = 'block';
+            results.style.display = 'none';
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            try {
+                const response = await fetch('/process', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.error || 'Error en el servidor');
+                }
+
+                const data = await response.json();
+                currentData = data;
+                displayResults(data);
+            } catch (err) {
+                alert('Error processing: ' + err.message);
+                dropZone.style.display = 'block';
+                loader.style.display = 'none';
+            }
+        }
+
+        function displayResults(data) {
+            loader.style.display = 'none';
+            results.style.display = 'block';
+
+            // Raw JSON
+            rawJson.textContent = JSON.stringify(data, null, 2);
+
+            // Table
+            itemsTableBody.innerHTML = '';
+            const items = data.items || [];
+            items.forEach(item => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${item.descripcion || '-'}</td>
+                    <td>${item.cantidad || 0}</td>
+                    <td>$${Number(item.precio_unitario || 0).toLocaleString()}</td>
+                    <td>$${Number(item.subtotal || 0).toLocaleString()}</td>
+                `;
+                itemsTableBody.appendChild(row);
+            });
+
+            // Totales
+            document.getElementById('totalSubtotal').textContent = `$${Number(data.subtotal_total || 0).toLocaleString()}`;
+            document.getElementById('totalTributos').textContent = `$${Number(data.otros_tributos || 0).toLocaleString()}`;
+            document.getElementById('totalFinal').textContent = `$${Number(data.total_final || 0).toLocaleString()}`;
+        }
+
+        // Exportar CSV
+        document.getElementById('exportCsv').addEventListener('click', () => {
+            if (!currentData || !currentData.items) return;
+
+            const items = currentData.items;
+            let csv = 'Descripcion,Cantidad,Precio Unitario,Subtotal\n';
+            
+            items.forEach(item => {
+                const desc = (item.descripcion || '').replace(/,/g, '');
+                csv += `${desc},${item.cantidad},${item.precio_unitario},${item.subtotal}\n`;
+            });
+
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            const url = URL.createObjectURL(blob);
+            link.setAttribute('href', url);
+            link.setAttribute('download', 'factura_items.csv');
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        });
+    </script>
+</body>
+</html>
