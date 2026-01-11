@@ -762,10 +762,15 @@
                 itemsTableBody.appendChild(row);
             });
 
+            // Lógica para obtener totales de estructuras planas o anidadas
+            const subtotal = data.subtotal_total || (data.totales && data.totales.subtotal) || 0;
+            const tributos = data.otros_tributos || (data.totales && data.totales.otros_tributos) || 0;
+            const total = data.total_final || (data.totales && data.totales.total_final) || (data.totales && data.totales.total) || 0;
+
             // Totales
-            document.getElementById('totalSubtotal').textContent = `$${Number(data.subtotal_total || 0).toLocaleString()}`;
-            document.getElementById('totalTributos').textContent = `$${Number(data.otros_tributos || 0).toLocaleString()}`;
-            document.getElementById('totalFinal').textContent = `$${Number(data.total_final || 0).toLocaleString()}`;
+            document.getElementById('totalSubtotal').textContent = `$${Number(subtotal).toLocaleString()}`;
+            document.getElementById('totalTributos').textContent = `$${Number(tributos).toLocaleString()}`;
+            document.getElementById('totalFinal').textContent = `$${Number(total).toLocaleString()}`;
         }
 
         // Exportar CSV

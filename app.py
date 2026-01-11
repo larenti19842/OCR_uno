@@ -102,23 +102,33 @@ def process_invoice():
             
             # Prompt mejorado para Ollama
             prompt = """
-            Eres un experto en extracción de datos de facturas. Analiza la imagen y extrae la información en un JSON estricto.
+            Eres un experto en extracción de datos de facturas y OCR. Analiza la imagen y extrae la información en un JSON estricto.
             
-            INSTRUCCIONES CRÍTICAS:
-            1. Los números entre paréntesis como '(21.00)' suelen indicar el porcentaje de IVA y NO deben confundirse con la cantidad. 
-            2. Si la cantidad no es explícita, asume 1 por defecto.
-            3. El 'subtotal' de cada ítem suele ser el valor a la derecha de la línea.
-            4. Identifica correctamente los nombres de productos (ej. EMPANADA CAPRESE, EMPANADA ATN, etc).
-            5. Extrae los totales finales del pie de la factura.
+            INSTRUCCIONES DE EXTRACCIÓN:
+            1. CABECERA: Extrae el CUIT del emisor, punto de venta, número de factura y fecha.
+            2. ÍTEMS: 
+               - Los números en paréntesis como '(21.00)' son porcentajes de IVA (21%), NO los uses como cantidad. 
+               - Si la cantidad no es clara, asume 1.
+               - El precio unitario es el valor individual.
+               - El subtotal es el producto Cantidad x Precio o el valor a la derecha.
+            3. TOTALES: Extrae el Subtotal neto (antes de impuestos), otros tributos/tasas y el Total Final.
             
-            FORMATO DE SALIDA (JSON):
+            FORMATO DE SALIDA (JSON ESTRICTO):
             {
+              "cabecera": {
+                "cuit_emisor": "",
+                "punto_venta": "",
+                "numero_factura": "",
+                "fecha": ""
+              },
               "items": [
-                {"descripcion": "Nombre del producto", "cantidad": 1, "precio_unitario": 10.0, "subtotal": 10.0}
+                {"descripcion": "", "cantidad": 1, "precio_unitario": 0.0, "subtotal": 0.0}
               ],
-              "subtotal_total": 0.0,
-              "otros_tributos": 0.0,
-              "total_final": 0.0
+              "totales": {
+                "subtotal": 0.0,
+                "otros_tributos": 0.0,
+                "total_final": 0.0
+              }
             }
             """
             
