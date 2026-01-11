@@ -651,6 +651,8 @@
                         <div class="form-group">
                             <label>Modelo</label>
                             <select id="openrouterModel">
+                                <option value="qwen/qwen-2.5-vl-7b-instruct:free">Qwen 2.5 VL 7B (Free)</option>
+                                <option value="mistralai/ministral-3b">Ministral 3B</option>
                                 <option value="google/gemini-2.0-flash-001">Gemini 2.0 Flash</option>
                                 <option value="google/gemini-pro-vision">Gemini Pro Vision</option>
                                 <option value="anthropic/claude-3.5-sonnet">Claude 3.5 Sonnet</option>
@@ -832,7 +834,34 @@
             loadSettings();
             setProvider(currentProvider);
             checkOllamaConnection();
+            refreshModels(); // Sync with backend
         });
+
+        async function refreshModels() {
+            try {
+                const response = await fetch('/api/models');
+                if (response.ok) {
+                    const models = await response.json();
+                    const select = document.getElementById('openrouterModel');
+                    const currentVal = select.value;
+
+                    select.innerHTML = '';
+                    models.forEach(model => {
+                        const opt = document.createElement('option');
+                        opt.value = model.id;
+                        opt.textContent = model.name;
+                        select.appendChild(opt);
+                    });
+
+                    // Restore selection if still available
+                    if ([...select.options].some(o => o.value === currentVal)) {
+                        select.value = currentVal;
+                    }
+                }
+            } catch (e) {
+                console.error('Error fetching models:', e);
+            }
+        }
 
         function loadSettings() {
             const apiKey = localStorage.getItem('openrouter_api_key') || '';

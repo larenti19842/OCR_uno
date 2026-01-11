@@ -18,6 +18,8 @@ DEFAULT_OLLAMA_MODEL = "ministral-facturador-full"
 
 # Modelos populares de OpenRouter para visión
 OPENROUTER_MODELS = [
+    {"id": "qwen/qwen-2.5-vl-7b-instruct:free", "name": "Qwen 2.5 VL 7B (Free)"},
+    {"id": "mistralai/ministral-3b", "name": "Ministral 3B"},
     {"id": "google/gemini-2.0-flash-001", "name": "Gemini 2.0 Flash"},
     {"id": "google/gemini-pro-vision", "name": "Gemini Pro Vision"},
     {"id": "anthropic/claude-3.5-sonnet", "name": "Claude 3.5 Sonnet"},
