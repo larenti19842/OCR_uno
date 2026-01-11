@@ -1046,8 +1046,29 @@
             loader.style.display = 'none';
             results.style.display = 'block';
 
+            // Raw JSON
             rawJson.textContent = JSON.stringify(data, null, 2);
 
+            if (data.error) {
+                // Si hay un error de parseo, mostramos el banner de error y ocultamos tablas
+                document.getElementById('successBanner').style.background = 'rgba(239, 68, 68, 0.2)';
+                document.getElementById('successBanner').style.borderColor = '#ef4444';
+                document.getElementById('successBanner').querySelector('.text').textContent = 'Error de Extracción';
+                document.getElementById('successBanner').querySelector('.text').style.color = '#ef4444';
+                document.getElementById('successBanner').querySelector('.icon').textContent = '❌';
+                document.getElementById('headerInfoCard').style.display = 'none';
+                itemsTableBody.innerHTML = '<tr><td colspan="4" style="text-align:center">No se pudieron extraer los ítems</td></tr>';
+                return;
+            }
+
+            // Restaurar banner por si venimos de un error
+            document.getElementById('successBanner').style.background = '';
+            document.getElementById('successBanner').style.borderColor = '';
+            document.getElementById('successBanner').querySelector('.text').textContent = 'Procesamiento completado';
+            document.getElementById('successBanner').querySelector('.text').style.color = '';
+            document.getElementById('successBanner').querySelector('.icon').textContent = '✅';
+
+            // Cabecera
             if (data.cabecera) {
                 document.getElementById('headerInfoCard').style.display = 'block';
                 document.getElementById('headerCuit').textContent = data.cabecera.cuit_emisor || '-';

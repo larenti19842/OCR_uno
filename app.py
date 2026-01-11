@@ -66,6 +66,11 @@ def get_extraction_prompt():
     return """
     Eres un experto en extracción de datos de facturas y OCR. Analiza la imagen y extrae la información en un JSON estricto.
     
+    PROHIBICIONES CRÍTICAS:
+    - NO incluyas NINGUNA nota, explicación, razonamiento o texto fuera del JSON.
+    - NO incluyas metadatos o comentarios dentro del JSON.
+    - El resultado debe ser EXCLUSIVAMENTE el objeto JSON.
+    
     INSTRUCCIONES DE EXTRACCIÓN:
     1. CABECERA: Extrae el CUIT del emisor, punto de venta, número de factura y fecha.
     2. ÍTEMS: 
@@ -236,23 +241,25 @@ def process_invoice():
                         except json.JSONDecodeError:
                             continue
             
-            elapsed = round(time.time() - start_time, 1)
-            
-            # Intentar extraer JSON de la respuesta
+            # Intentar extraer JSON de la respuesta de forma robusta
             try:
-                # A veces el modelo envuelve el JSON en markdown
-                if '```json' in full_response:
-                    json_start = full_response.find('```json') + 7
-                    json_end = full_response.find('```', json_start)
-                    full_response = full_response[json_start:json_end].strip()
-                elif '```' in full_response:
-                    json_start = full_response.find('```') + 3
-                    json_end = full_response.find('```', json_start)
-                    full_response = full_response[json_start:json_end].strip()
+                # 1. Buscar el primer '{' y el último '}'
+                import re
+                json_match = re.search(r'({.*})', full_response, re.DOTALL)
+                if json_match:
+                    full_response = json_match.group(1)
                 
+                # 2. Limpieza básica de comentarios o texto extra si el regex fue muy amplio
+                # Intentamos parsear. Si falla, es que el modelo metió texto dentro.
                 output_data = json.loads(full_response)
             except json.JSONDecodeError:
-                output_data = {"error": "No se pudo parsear la respuesta del modelo", "raw": full_response}
+                # Si falla, último intento: limpiar líneas que no parezcan JSON
+                lines = full_response.split('\n')
+                cleaned_lines = [l for l in lines if any(c in l for c in '{}:",[]0123456789')]
+                try:
+                    output_data = json.loads("".join(cleaned_lines))
+                except:
+                    output_data = {"error": "Respuesta malformada", "raw": full_response}
             
             yield f"data: {json.dumps({'phase': 'complete', 'message': f'Completado en {elapsed}s', 'tokens': token_count, 'elapsed': elapsed, 'result': output_data})}\n\n"
             
