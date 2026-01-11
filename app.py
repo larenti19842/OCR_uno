@@ -81,7 +81,7 @@ def process_invoice():
             "format": "json"
         }
         
-        response = requests.post(OLLAMA_API_URL, json=payload, timeout=180)
+        response = requests.post(OLLAMA_API_URL, json=payload, timeout=600)
         response.raise_for_status()
         
         result = response.json()
