@@ -32,22 +32,29 @@ OPENROUTER_MODELS = [
 
 def optimize_image(image_bytes):
     """
-    Optimiza la imagen para OCR preservando tamaño bajo.
+    Optimiza la imagen para OCR con alta fidelidad:
+    - Ancho máximo 1024px (mayor resolución para texto pequeño)
+    - Escala de grises + Normalización
+    - Contraste agresivo (+35%) para separar texto del fondo
+    - Borde blanco protector (evita recortes en bordes)
+    - Formato JPEG alta calidad (95%)
     """
     img = Image.open(io.BytesIO(image_bytes))
     
     if img.mode in ('RGBA', 'P'):
         img = img.convert('RGB')
     
-    max_width = 800
+    # 1. Redimensionar (Aumentado a 1024px para capturar detalles finos)
+    max_width = 1024
     if img.width > max_width:
         ratio = max_width / float(img.width)
         new_height = int(float(img.height) * float(ratio))
         img = img.resize((max_width, new_height), Image.Resampling.LANCZOS)
     
+    # 2. Convertir a escala de grises y mejorar contraste
     img = img.convert('L')
-    img = img.filter(ImageFilter.MedianFilter(size=3))
     
+    # 3. Normalización avanzada (Auto-levels)
     extrema = img.getextrema()
     if extrema:
         min_val, max_val = extrema
@@ -56,12 +63,20 @@ def optimize_image(image_bytes):
             offset = -min_val * scale
             img = img.point(lambda x: int(x * scale + offset))
     
+    # 4. Aumento de contraste (+35% para compensar ruidos de fondo)
     enhancer = ImageEnhance.Contrast(img)
-    img = enhancer.enhance(1.20)
-    img = img.filter(ImageFilter.UnsharpMask(radius=2, percent=150, threshold=3))
+    img = enhancer.enhance(1.35)
     
+    # 5. Nitidez (Unsharp Mask optimizado)
+    img = img.filter(ImageFilter.UnsharpMask(radius=1.5, percent=180, threshold=2))
+    
+    # 6. Agregar borde blanco de 10px (Ayuda a modelos de visión con el encuadre)
+    from PIL import ImageOps
+    img = ImageOps.expand(img, border=10, fill='white')
+    
+    # 7. Guardar con calidad casi máxima (95%)
     buffer = io.BytesIO()
-    img.save(buffer, format="JPEG", quality=85, optimize=True)
+    img.save(buffer, format="JPEG", quality=95, optimize=True)
     return buffer.getvalue()
 
 def get_extraction_prompt():
