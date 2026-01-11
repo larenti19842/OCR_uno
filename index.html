@@ -483,6 +483,24 @@
         </div>
 
         <div id="results" class="results-container">
+            <div class="card header-info-card" id="headerInfoCard"
+                style="display: none; margin-bottom: 1rem; padding: 1.5rem;">
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem;">
+                    <div>
+                        <span style="color: var(--text-muted); font-size: 0.8rem; display: block;">CUIT Emisor</span>
+                        <strong id="headerCuit">-</strong>
+                    </div>
+                    <div>
+                        <span style="color: var(--text-muted); font-size: 0.8rem; display: block;">Nro Factura</span>
+                        <strong id="headerNumber">-</strong>
+                    </div>
+                    <div>
+                        <span style="color: var(--text-muted); font-size: 0.8rem; display: block;">Fecha</span>
+                        <strong id="headerDate">-</strong>
+                    </div>
+                </div>
+            </div>
+
             <div class="card">
                 <div class="success-banner" id="successBanner">
                     <span class="icon">✅</span>
@@ -747,6 +765,16 @@
 
             // Raw JSON
             rawJson.textContent = JSON.stringify(data, null, 2);
+
+            // Cabecera
+            if (data.cabecera) {
+                document.getElementById('headerInfoCard').style.display = 'block';
+                document.getElementById('headerCuit').textContent = data.cabecera.cuit_emisor || '-';
+                document.getElementById('headerNumber').textContent = (data.cabecera.punto_venta ? data.cabecera.punto_venta + '-' : '') + (data.cabecera.numero_factura || '-');
+                document.getElementById('headerDate').textContent = data.cabecera.fecha || '-';
+            } else {
+                document.getElementById('headerInfoCard').style.display = 'none';
+            }
 
             // Table
             itemsTableBody.innerHTML = '';
