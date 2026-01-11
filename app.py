@@ -5,7 +5,7 @@ import io
 import requests
 from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
-from PIL import Image, ImageEnhance
+from PIL import Image, ImageEnhance, ImageFilter
 
 app = Flask(__name__, static_folder='.')
 CORS(app)
@@ -19,6 +19,7 @@ def optimize_image(image_bytes):
     - Ancho máximo 700px (manteniendo proporción)
     - Escala de grises
     - Contraste +15%
+    - Sharpen para mejorar bordes de texto
     - Formato JPEG calidad 93%
     """
     img = Image.open(io.BytesIO(image_bytes))
@@ -37,9 +38,11 @@ def optimize_image(image_bytes):
     enhancer = ImageEnhance.Contrast(img)
     img = enhancer.enhance(1.15)
     
-    # 4. Guardar en memoria como JPEG calidad 93%
+    # 4. Sharpen (Filtro de nitidez)
+    img = img.filter(ImageFilter.SHARPEN)
+    
+    # 5. Guardar en memoria como JPEG calidad 93%
     buffer = io.BytesIO()
-    # JPEG necesita modo RGB o L (escala de grises)
     img.save(buffer, format="JPEG", quality=93)
     return buffer.getvalue()
 
@@ -64,12 +67,26 @@ def process_invoice():
         # Convertir a Base64 para Ollama
         base64_image = base64.b64encode(optimized_data).decode('utf-8')
         
-        # Prompt para Ollama
+        # Prompt mejorado para Ollama
         prompt = """
-        Analiza esta factura y extrae la información en formato JSON estricto.
-        Incluye una lista de 'items' con: descripcion, cantidad, precio_unitario, subtotal.
-        Incluye totales con: subtotal_total, otros_tributos, total_final.
-        Si no encuentras algún campo, déjalo como 0 o string vacío.
+        Eres un experto en extracción de datos de facturas. Analiza la imagen y extrae la información en un JSON estricto.
+        
+        INSTRUCCIONES CRÍTICAS:
+        1. Los números entre paréntesis como '(21.00)' suelen indicar el porcentaje de IVA y NO deben confundirse con la cantidad. 
+        2. Si la cantidad no es explícita, asume 1 por defecto.
+        3. El 'subtotal' de cada ítem suele ser el valor a la derecha de la línea.
+        4. Identifica correctamente los nombres de productos (ej. EMPANADA CAPRESE, EMPANADA ATN, etc).
+        5. Extrae los totales finales del pie de la factura.
+        
+        FORMATO DE SALIDA (JSON):
+        {
+          "items": [
+            {"descripcion": "Nombre del producto", "cantidad": 1, "precio_unitario": 10.0, "subtotal": 10.0}
+          ],
+          "subtotal_total": 0.0,
+          "otros_tributos": 0.0,
+          "total_final": 0.0
+        }
         """
         
         # Llamar a Ollama
@@ -78,7 +95,11 @@ def process_invoice():
             "prompt": prompt,
             "stream": False,
             "images": [base64_image],
-            "format": "json"
+            "format": "json",
+            "options": {
+                "temperature": 0.1,
+                "num_predict": 1000
+            }
         }
         
         response = requests.post(OLLAMA_API_URL, json=payload, timeout=600)
