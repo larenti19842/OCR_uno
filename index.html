@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Invoice OCR Pro - Ollama</title>
+    <title>Invoice OCR Pro</title>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&display=swap" rel="stylesheet">
     <style>
         :root {
@@ -47,7 +47,7 @@
 
         header {
             text-align: center;
-            margin-bottom: 3rem;
+            margin-bottom: 2rem;
         }
 
         h1 {
@@ -65,7 +65,183 @@
             font-size: 1.1rem;
         }
 
-        /* Drag & Drop Zone */
+        /* Settings Panel */
+        .settings-panel {
+            background: var(--card-bg);
+            border-radius: 1rem;
+            padding: 1.5rem;
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--border);
+            margin-bottom: 2rem;
+        }
+
+        .settings-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .settings-header h3 {
+            font-size: 1rem;
+            color: var(--text-muted);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .settings-toggle {
+            color: var(--text-muted);
+            transition: transform 0.3s;
+        }
+
+        .settings-panel.open .settings-toggle {
+            transform: rotate(180deg);
+        }
+
+        .settings-content {
+            display: none;
+            margin-top: 1.5rem;
+        }
+
+        .settings-panel.open .settings-content {
+            display: block;
+        }
+
+        .settings-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .form-group label {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+        }
+
+        .form-group input,
+        .form-group select {
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid var(--border);
+            border-radius: 0.5rem;
+            padding: 0.75rem 1rem;
+            color: var(--text-main);
+            font-size: 0.95rem;
+            transition: border-color 0.2s;
+        }
+
+        .form-group input:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: var(--primary);
+        }
+
+        .form-group input::placeholder {
+            color: var(--text-muted);
+        }
+
+        /* Provider Toggle */
+        .provider-toggle {
+            display: flex;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 0.75rem;
+            padding: 0.25rem;
+            gap: 0.25rem;
+        }
+
+        .provider-btn {
+            flex: 1;
+            padding: 0.75rem 1rem;
+            border: none;
+            background: transparent;
+            color: var(--text-muted);
+            border-radius: 0.5rem;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+        }
+
+        .provider-btn.active {
+            background: var(--primary);
+            color: white;
+        }
+
+        .provider-btn:hover:not(.active) {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .openrouter-settings {
+            display: none;
+            animation: fadeIn 0.3s ease;
+        }
+
+        .openrouter-settings.visible {
+            display: block;
+        }
+
+        .ollama-settings {
+            display: block;
+            animation: fadeIn 0.3s ease;
+        }
+
+        .ollama-settings.hidden {
+            display: none;
+        }
+
+        .api-key-input {
+            position: relative;
+        }
+
+        .api-key-input input {
+            padding-right: 3rem;
+        }
+
+        .toggle-visibility {
+            position: absolute;
+            right: 0.75rem;
+            top: 50%;
+            transform: translateY(-50%);
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            cursor: pointer;
+            padding: 0.25rem;
+        }
+
+        /* Status Indicator */
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            margin-top: 0.5rem;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--warning);
+        }
+
+        .status-dot.connected {
+            background: var(--success);
+        }
+
+        /* Drop Zone */
         .drop-zone {
             background: var(--card-bg);
             border: 2px dashed var(--border);
@@ -101,7 +277,7 @@
             display: none;
         }
 
-        /* Loader with Progress */
+        /* Loader */
         .loader-container {
             display: none;
             margin-top: 2rem;
@@ -226,13 +402,6 @@
             }
         }
 
-        /* Results */
-        .results-container {
-            display: none;
-            margin-top: 3rem;
-            animation: fadeIn 0.5s ease;
-        }
-
         @keyframes fadeIn {
             from {
                 opacity: 0;
@@ -243,6 +412,13 @@
                 opacity: 1;
                 transform: translateY(0);
             }
+        }
+
+        /* Results */
+        .results-container {
+            display: none;
+            margin-top: 3rem;
+            animation: fadeIn 0.5s ease;
         }
 
         .card {
@@ -335,7 +511,6 @@
             background: linear-gradient(135deg, var(--primary), var(--primary-dark));
         }
 
-        /* Actions */
         .actions {
             display: flex;
             gap: 1rem;
@@ -369,7 +544,6 @@
             background: rgba(255, 255, 255, 0.2);
         }
 
-        /* JSON Preview */
         details {
             margin-top: 2rem;
             cursor: pointer;
@@ -390,7 +564,6 @@
             color: #10b981;
         }
 
-        /* Responsive */
         @media (max-width: 768px) {
             body {
                 padding: 1rem;
@@ -413,17 +586,89 @@
             .progress-stats {
                 grid-template-columns: 1fr;
             }
+
+            .provider-toggle {
+                flex-direction: column;
+            }
         }
     </style>
 </head>
 
 <body>
-
     <div class="container">
         <header>
             <h1>Invoice OCR Pro</h1>
-            <p class="subtitle">Potenciado por Ollama & AI Local</p>
+            <p class="subtitle">Extracción IA de Facturas</p>
         </header>
+
+        <!-- Settings Panel -->
+        <div class="settings-panel" id="settingsPanel">
+            <div class="settings-header" onclick="toggleSettings()">
+                <h3>⚙️ Configuración del Proveedor</h3>
+                <span class="settings-toggle">▼</span>
+            </div>
+            <div class="settings-content">
+                <div class="form-group" style="margin-bottom: 1rem;">
+                    <label>Proveedor de IA</label>
+                    <div class="provider-toggle">
+                        <button type="button" class="provider-btn active" id="btnOllama"
+                            onclick="setProvider('ollama')">
+                            🖥️ Ollama (Local)
+                        </button>
+                        <button type="button" class="provider-btn" id="btnOpenRouter"
+                            onclick="setProvider('openrouter')">
+                            ☁️ OpenRouter (Cloud)
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Ollama Settings -->
+                <div class="ollama-settings" id="ollamaSettings">
+                    <div class="settings-row">
+                        <div class="form-group">
+                            <label>Modelo de Ollama</label>
+                            <input type="text" id="ollamaModel" value="ministral-facturador-full"
+                                placeholder="nombre-del-modelo">
+                        </div>
+                    </div>
+                    <div class="status-indicator">
+                        <span class="status-dot" id="ollamaStatus"></span>
+                        <span id="ollamaStatusText">Verificando conexión...</span>
+                    </div>
+                </div>
+
+                <!-- OpenRouter Settings -->
+                <div class="openrouter-settings" id="openrouterSettings">
+                    <div class="settings-row">
+                        <div class="form-group">
+                            <label>API Key de OpenRouter</label>
+                            <div class="api-key-input">
+                                <input type="password" id="openrouterApiKey" placeholder="sk-or-v1-...">
+                                <button type="button" class="toggle-visibility"
+                                    onclick="toggleApiKeyVisibility()">👁️</button>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label>Modelo</label>
+                            <select id="openrouterModel">
+                                <option value="google/gemini-2.0-flash-001">Gemini 2.0 Flash</option>
+                                <option value="google/gemini-pro-vision">Gemini Pro Vision</option>
+                                <option value="anthropic/claude-3.5-sonnet">Claude 3.5 Sonnet</option>
+                                <option value="anthropic/claude-3-haiku">Claude 3 Haiku</option>
+                                <option value="openai/gpt-4o">GPT-4o</option>
+                                <option value="openai/gpt-4o-mini">GPT-4o Mini</option>
+                                <option value="meta-llama/llama-3.2-90b-vision-instruct">Llama 3.2 90B Vision</option>
+                                <option value="qwen/qwen2.5-vl-72b-instruct">Qwen 2.5 VL 72B</option>
+                            </select>
+                        </div>
+                    </div>
+                    <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.5rem;">
+                        💡 Obtén tu API key en <a href="https://openrouter.ai/keys" target="_blank"
+                            style="color: var(--accent);">openrouter.ai/keys</a>
+                    </p>
+                </div>
+            </div>
+        </div>
 
         <div id="dropZone" class="drop-zone">
             <span class="icon">📄</span>
@@ -464,13 +709,13 @@
                         <div class="phase-icon">
                             <div class="phase-dot"></div>
                         </div>
-                        <span>Enviando a Ollama</span>
+                        <span id="phaseSendText">Enviando a IA</span>
                     </div>
                     <div class="phase-item" id="phaseGenerate">
                         <div class="phase-icon">
                             <div class="phase-dot"></div>
                         </div>
-                        <span>Generando respuesta (CPU)</span>
+                        <span>Generando respuesta</span>
                     </div>
                     <div class="phase-item" id="phaseComplete">
                         <div class="phase-icon">
@@ -519,9 +764,7 @@
                                 <th>Subtotal</th>
                             </tr>
                         </thead>
-                        <tbody>
-                            <!-- Se llena dinámicamente -->
-                        </tbody>
+                        <tbody></tbody>
                     </table>
                 </div>
 
@@ -558,14 +801,19 @@
     </div>
 
     <script>
+        // State
+        let currentProvider = localStorage.getItem('provider') || 'ollama';
+        let currentData = null;
+        let localTimer = null;
+        let localElapsed = 0;
+
+        // Elements
         const dropZone = document.getElementById('dropZone');
         const fileInput = document.getElementById('fileInput');
         const loader = document.getElementById('loader');
         const results = document.getElementById('results');
         const rawJson = document.getElementById('rawJson');
         const itemsTableBody = document.querySelector('#itemsTable tbody');
-
-        // Progress elements
         const progressTitle = document.getElementById('progressTitle');
         const statTime = document.getElementById('statTime');
         const statTokens = document.getElementById('statTokens');
@@ -579,38 +827,89 @@
             complete: document.getElementById('phaseComplete')
         };
 
-        let currentData = null;
-        let localTimer = null;
-        let localElapsed = 0;
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            loadSettings();
+            setProvider(currentProvider);
+            checkOllamaConnection();
+        });
 
-        // Eventos Drag & Drop
+        function loadSettings() {
+            const apiKey = localStorage.getItem('openrouter_api_key') || '';
+            const model = localStorage.getItem('openrouter_model') || 'google/gemini-2.0-flash-001';
+            const ollamaModel = localStorage.getItem('ollama_model') || 'ministral-facturador-full';
+
+            document.getElementById('openrouterApiKey').value = apiKey;
+            document.getElementById('openrouterModel').value = model;
+            document.getElementById('ollamaModel').value = ollamaModel;
+        }
+
+        function saveSettings() {
+            localStorage.setItem('provider', currentProvider);
+            localStorage.setItem('openrouter_api_key', document.getElementById('openrouterApiKey').value);
+            localStorage.setItem('openrouter_model', document.getElementById('openrouterModel').value);
+            localStorage.setItem('ollama_model', document.getElementById('ollamaModel').value);
+        }
+
+        function toggleSettings() {
+            document.getElementById('settingsPanel').classList.toggle('open');
+        }
+
+        function setProvider(provider) {
+            currentProvider = provider;
+
+            document.getElementById('btnOllama').classList.toggle('active', provider === 'ollama');
+            document.getElementById('btnOpenRouter').classList.toggle('active', provider === 'openrouter');
+
+            document.getElementById('ollamaSettings').classList.toggle('hidden', provider !== 'ollama');
+            document.getElementById('openrouterSettings').classList.toggle('visible', provider === 'openrouter');
+
+            document.getElementById('phaseSendText').textContent =
+                provider === 'openrouter' ? 'Enviando a OpenRouter' : 'Enviando a Ollama';
+
+            saveSettings();
+        }
+
+        function toggleApiKeyVisibility() {
+            const input = document.getElementById('openrouterApiKey');
+            input.type = input.type === 'password' ? 'text' : 'password';
+        }
+
+        async function checkOllamaConnection() {
+            const statusDot = document.getElementById('ollamaStatus');
+            const statusText = document.getElementById('ollamaStatusText');
+
+            try {
+                const response = await fetch('http://localhost:11434/api/tags', { method: 'GET' });
+                if (response.ok) {
+                    statusDot.classList.add('connected');
+                    statusText.textContent = 'Ollama conectado';
+                } else {
+                    throw new Error('Not connected');
+                }
+            } catch (e) {
+                statusDot.classList.remove('connected');
+                statusText.textContent = 'Ollama no disponible';
+            }
+        }
+
+        // Drag & Drop
         dropZone.addEventListener('click', () => fileInput.click());
-
-        dropZone.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            dropZone.classList.add('dragover');
-        });
-
-        dropZone.addEventListener('dragleave', () => {
-            dropZone.classList.remove('dragover');
-        });
-
+        dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('dragover'); });
+        dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
         dropZone.addEventListener('drop', (e) => {
             e.preventDefault();
             dropZone.classList.remove('dragover');
             const file = e.dataTransfer.files[0];
             if (file) handleFile(file);
         });
-
         fileInput.addEventListener('change', (e) => {
             const file = e.target.files[0];
             if (file) handleFile(file);
         });
 
         function resetPhases() {
-            Object.values(phases).forEach(p => {
-                p.classList.remove('active', 'complete');
-            });
+            Object.values(phases).forEach(p => p.classList.remove('active', 'complete'));
         }
 
         function setPhase(phaseKey, isComplete = false) {
@@ -634,10 +933,7 @@
         }
 
         function stopLocalTimer() {
-            if (localTimer) {
-                clearInterval(localTimer);
-                localTimer = null;
-            }
+            if (localTimer) { clearInterval(localTimer); localTimer = null; }
         }
 
         async function handleFile(file) {
@@ -646,7 +942,8 @@
                 return;
             }
 
-            // UI State
+            saveSettings();
+
             dropZone.style.display = 'none';
             loader.style.display = 'block';
             results.style.display = 'none';
@@ -658,13 +955,18 @@
 
             const formData = new FormData();
             formData.append('file', file);
+            formData.append('provider', currentProvider);
+
+            if (currentProvider === 'openrouter') {
+                formData.append('api_key', document.getElementById('openrouterApiKey').value);
+                formData.append('model', document.getElementById('openrouterModel').value);
+            } else {
+                formData.append('model', document.getElementById('ollamaModel').value);
+            }
 
             let buffer = '';
             try {
-                const response = await fetch('/process', {
-                    method: 'POST',
-                    body: formData
-                });
+                const response = await fetch('/process', { method: 'POST', body: formData });
 
                 if (!response.ok) {
                     const errorText = await response.text();
@@ -678,13 +980,8 @@
                     const { done, value } = await reader.read();
                     if (done) break;
 
-                    // Decodificar el chunk y añadirlo al buffer
                     buffer += decoder.decode(value, { stream: true });
-
-                    // Procesar líneas completas en el buffer
                     const lines = buffer.split('\n');
-
-                    // La última parte puede estar incompleta, la dejamos en el buffer
                     buffer = lines.pop();
 
                     for (const line of lines) {
@@ -697,7 +994,7 @@
                                     handleProgress(data);
                                 }
                             } catch (e) {
-                                console.error('Error parseando JSON de stream:', e, 'Línea:', trimmedLine);
+                                console.error('Parse error:', e);
                             }
                         }
                     }
@@ -705,7 +1002,7 @@
             } catch (err) {
                 stopLocalTimer();
                 console.error('Stream error:', err);
-                alert('Error processing: ' + err.message);
+                alert('Error: ' + err.message);
                 dropZone.style.display = 'block';
                 loader.style.display = 'none';
             }
@@ -714,28 +1011,14 @@
         function handleProgress(data) {
             progressTitle.textContent = data.message || 'Procesando...';
 
-            if (data.elapsed) {
-                statTime.textContent = `${data.elapsed}s`;
-            }
-
-            if (data.tokens !== undefined) {
-                statTokens.textContent = data.tokens;
-            }
-
-            if (data.tokens_per_sec !== undefined) {
-                statSpeed.textContent = `${data.tokens_per_sec} t/s`;
-            }
+            if (data.elapsed) statTime.textContent = `${data.elapsed}s`;
+            if (data.tokens !== undefined) statTokens.textContent = data.tokens;
+            if (data.tokens_per_sec !== undefined) statSpeed.textContent = `${data.tokens_per_sec} t/s`;
 
             switch (data.phase) {
-                case 'optimizing':
-                    setPhase('optimize');
-                    break;
-                case 'optimized':
-                    setPhase('optimize', true);
-                    break;
-                case 'sending':
-                    setPhase('send');
-                    break;
+                case 'optimizing': setPhase('optimize'); break;
+                case 'optimized': setPhase('optimize', true); break;
+                case 'sending': setPhase('send'); break;
                 case 'generating':
                     setPhase('send', true);
                     setPhase('generate');
@@ -763,10 +1046,8 @@
             loader.style.display = 'none';
             results.style.display = 'block';
 
-            // Raw JSON
             rawJson.textContent = JSON.stringify(data, null, 2);
 
-            // Cabecera
             if (data.cabecera) {
                 document.getElementById('headerInfoCard').style.display = 'block';
                 document.getElementById('headerCuit').textContent = data.cabecera.cuit_emisor || '-';
@@ -776,7 +1057,6 @@
                 document.getElementById('headerInfoCard').style.display = 'none';
             }
 
-            // Table
             itemsTableBody.innerHTML = '';
             const items = data.items || [];
             items.forEach(item => {
@@ -790,18 +1070,15 @@
                 itemsTableBody.appendChild(row);
             });
 
-            // Lógica para obtener totales de estructuras planas o anidadas
             const subtotal = data.subtotal_total || (data.totales && data.totales.subtotal) || 0;
             const tributos = data.otros_tributos || (data.totales && data.totales.otros_tributos) || 0;
             const total = data.total_final || (data.totales && data.totales.total_final) || (data.totales && data.totales.total) || 0;
 
-            // Totales
             document.getElementById('totalSubtotal').textContent = `$${Number(subtotal).toLocaleString()}`;
             document.getElementById('totalTributos').textContent = `$${Number(tributos).toLocaleString()}`;
             document.getElementById('totalFinal').textContent = `$${Number(total).toLocaleString()}`;
         }
 
-        // Exportar CSV
         document.getElementById('exportCsv').addEventListener('click', () => {
             if (!currentData || !currentData.items) return;
 
@@ -815,13 +1092,9 @@
 
             const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
             const link = document.createElement('a');
-            const url = URL.createObjectURL(blob);
-            link.setAttribute('href', url);
-            link.setAttribute('download', 'factura_items.csv');
-            link.style.visibility = 'hidden';
-            document.body.appendChild(link);
+            link.href = URL.createObjectURL(blob);
+            link.download = 'factura_items.csv';
             link.click();
-            document.body.removeChild(link);
         });
     </script>
 </body>
