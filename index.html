@@ -856,6 +856,39 @@
                 </div>
             </div>
 
+            <!-- Visualización de Imágenes (Original vs Procesada) -->
+            <div class="card" id="imageComparisonCard" style="display: none; border-top: 4px solid var(--accent);">
+                <h3
+                    style="font-size: 1rem; color: var(--text-muted); margin-bottom: 1.5rem; text-transform: uppercase; letter-spacing: 1px;">
+                    👁️ Comparación de Imagen (Original vs Procesada)</h3>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem;">
+                    <div style="text-align: center;">
+                        <span
+                            style="font-size: 0.8rem; color: var(--text-muted); display: block; margin-bottom: 0.5rem;">Carga
+                            Original</span>
+                        <div
+                            style="background: rgba(0,0,0,0.3); border-radius: 0.5rem; padding: 0.5rem; height: 300px; display: flex; align-items: center; justify-content: center; overflow: hidden;">
+                            <img id="imgOriginal"
+                                style="max-width: 100%; max-height: 100%; object-fit: contain; border-radius: 4px;">
+                        </div>
+                    </div>
+                    <div style="text-align: center;">
+                        <span
+                            style="font-size: 0.8rem; color: var(--accent); display: block; margin-bottom: 0.5rem;">Optimización
+                            OCR</span>
+                        <div
+                            style="background: white; border-radius: 0.5rem; padding: 0.5rem; height: 300px; display: flex; align-items: center; justify-content: center; overflow: hidden; border: 2px solid var(--accent);">
+                            <img id="imgProcessed"
+                                style="max-width: 100%; max-height: 100%; object-fit: contain; border-radius: 4px;">
+                        </div>
+                    </div>
+                </div>
+                <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 1rem; text-align: center;">
+                    💡 La imagen de la derecha es la que se envió a la IA. Está optimizada para resaltar bordes y
+                    eliminar ruidos de fondo.
+                </p>
+            </div>
+
             <div class="actions">
                 <button id="exportCsv">
                     <span>📥</span> Exportar CSV
@@ -1040,6 +1073,11 @@
                 alert('Por favor sube una imagen válida.');
                 return;
             }
+
+            // Guardar URL de imagen original para comparación
+            const originalUrl = URL.createObjectURL(file);
+            document.getElementById('imgOriginal').src = originalUrl;
+            document.getElementById('imageComparisonCard').style.display = 'none'; // Ocultar hasta terminar
 
             saveSettings();
 
@@ -1242,6 +1280,12 @@
             document.getElementById('totalIva').textContent = formatARS(totals.total_iva);
             document.getElementById('totalTributos').textContent = formatARS(totals.total_tributos);
             document.getElementById('totalFinal').textContent = formatARS(totals.total);
+
+            // 6. Imágenes
+            document.getElementById('imageComparisonCard').style.display = 'block';
+            if (data.processed_image) {
+                document.getElementById('imgProcessed').src = `data:image/jpeg;base64,${data.processed_image}`;
+            }
         }
 
         document.getElementById('exportCsv').addEventListener('click', () => {

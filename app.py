@@ -4,9 +4,10 @@ import json
 import io
 import time
 import requests
+import re
 from flask import Flask, request, jsonify, send_from_directory, Response, stream_with_context
 from flask_cors import CORS
-from PIL import Image, ImageEnhance, ImageFilter
+from PIL import Image, ImageEnhance, ImageFilter, ImageOps
 
 app = Flask(__name__, static_folder='.')
 CORS(app)
@@ -33,48 +34,38 @@ OPENROUTER_MODELS = [
 def optimize_image(image_bytes):
     """
     Optimiza la imagen para OCR con alta fidelidad:
-    - Ancho máximo 1024px (mayor resolución para texto pequeño)
-    - Escala de grises + Normalización
-    - Contraste agresivo (+35%) para separar texto del fondo
-    - Borde blanco protector (evita recortes en bordes)
-    - Formato JPEG alta calidad (95%)
+    - Autocontrast con cutoff para eliminar sombras leves
+    - Especial énfasis en nitidez de bordes
     """
     img = Image.open(io.BytesIO(image_bytes))
     
     if img.mode in ('RGBA', 'P'):
         img = img.convert('RGB')
     
-    # 1. Redimensionar (Aumentado a 1024px para capturar detalles finos)
+    # 1. Redimensionar
     max_width = 1024
     if img.width > max_width:
         ratio = max_width / float(img.width)
         new_height = int(float(img.height) * float(ratio))
         img = img.resize((max_width, new_height), Image.Resampling.LANCZOS)
     
-    # 2. Convertir a escala de grises y mejorar contraste
+    # 2. Convertir a escala de grises
     img = img.convert('L')
     
-    # 3. Normalización avanzada (Auto-levels)
-    extrema = img.getextrema()
-    if extrema:
-        min_val, max_val = extrema
-        if max_val > min_val:
-            scale = 255.0 / (max_val - min_val)
-            offset = -min_val * scale
-            img = img.point(lambda x: int(x * scale + offset))
+    # 3. Autocontrast avanzado (elimina ruidos en blancos/negros extremos)
+    img = ImageOps.autocontrast(img, cutoff=0.5)
     
-    # 4. Aumento de contraste (+35% para compensar ruidos de fondo)
+    # 4. Aumento de contraste (+40%)
     enhancer = ImageEnhance.Contrast(img)
-    img = enhancer.enhance(1.35)
+    img = enhancer.enhance(1.40)
     
-    # 5. Nitidez (Unsharp Mask optimizado)
-    img = img.filter(ImageFilter.UnsharpMask(radius=1.5, percent=180, threshold=2))
+    # 5. Nitidez extrema para OCR
+    img = img.filter(ImageFilter.UnsharpMask(radius=1.0, percent=200, threshold=1))
     
-    # 6. Agregar borde blanco de 10px (Ayuda a modelos de visión con el encuadre)
-    from PIL import ImageOps
-    img = ImageOps.expand(img, border=10, fill='white')
+    # 6. Borde protector
+    img = ImageOps.expand(img, border=15, fill='white')
     
-    # 7. Guardar con calidad casi máxima (95%)
+    # 7. Guardar
     buffer = io.BytesIO()
     img.save(buffer, format="JPEG", quality=95, optimize=True)
     return buffer.getvalue()
@@ -86,7 +77,8 @@ def get_extraction_prompt():
 
     PROHIBICIONES:
     - NO incluyas ninguna nota, explicación o razonamiento fuera del JSON.
-    - NO inventes datos. Si un campo no existe o es ilegible, coloca null o 0 según corresponda.
+    - NO incluyas metadatos o comentarios dentro del JSON.
+    - El resultado debe ser EXCLUSIVAMENTE el objeto JSON.
 
     INSTRUCCIONES FISCALES (ARGENTINA):
     1. COMPROBANTE: Identifica la letra (A, B, C, M, E) y el tipo (Factura, Nota de Crédito, Ticket, etc). Extrae Punto de Venta (5 dígitos) y Número (8 dígitos). Extrae el CAE y su vencimiento.
@@ -130,7 +122,6 @@ def index():
 
 @app.route('/api/models', methods=['GET'])
 def get_models():
-    """Retorna la lista de modelos disponibles para OpenRouter"""
     return jsonify(OPENROUTER_MODELS)
 
 @app.route('/process', methods=['POST'])
@@ -142,7 +133,6 @@ def process_invoice():
     if file.filename == '':
         return jsonify({"error": "No se seleccionó ningún archivo"}), 400
 
-    # Obtener configuración del proveedor
     provider = request.form.get('provider', 'ollama')
     api_key = request.form.get('api_key', '')
     model = request.form.get('model', DEFAULT_OLLAMA_MODEL)
@@ -159,14 +149,12 @@ def process_invoice():
             yield f"data: {json.dumps({'phase': 'optimizing', 'message': 'Optimizando imagen...', 'elapsed': 0})}\n\n"
             
             optimized_data = optimize_image(image_bytes)
-            image_size_kb = len(optimized_data) / 1024
+            processed_b64 = base64.b64encode(optimized_data).decode('utf-8')
             
             elapsed = round(time.time() - start_time, 1)
-            yield f"data: {json.dumps({'phase': 'optimized', 'message': f'Imagen optimizada ({image_size_kb:.1f} KB)', 'elapsed': elapsed})}\n\n"
+            yield f"data: {json.dumps({'phase': 'optimized', 'message': f'Imagen optimizada ({len(optimized_data)/1024:.1f} KB)', 'elapsed': elapsed})}\n\n"
             
-            base64_image = base64.b64encode(optimized_data).decode('utf-8')
             prompt = get_extraction_prompt()
-            
             provider_name = "OpenRouter" if provider == "openrouter" else "Ollama"
             yield f"data: {json.dumps({'phase': 'sending', 'message': f'Enviando a {provider_name}...', 'elapsed': round(time.time() - start_time, 1)})}\n\n"
             
@@ -174,14 +162,12 @@ def process_invoice():
             token_count = 0
             
             if provider == "openrouter":
-                # Llamar a OpenRouter
                 headers = {
                     "Authorization": f"Bearer {api_key}",
                     "Content-Type": "application/json",
                     "HTTP-Referer": "http://localhost:5000",
                     "X-Title": "Invoice OCR Pro"
                 }
-                
                 payload = {
                     "model": model,
                     "messages": [
@@ -189,7 +175,7 @@ def process_invoice():
                             "role": "user",
                             "content": [
                                 {"type": "text", "text": prompt},
-                                {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}}
+                                {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{processed_b64}"}}
                             ]
                         }
                     ],
@@ -197,55 +183,39 @@ def process_invoice():
                     "max_tokens": 2000,
                     "stream": True
                 }
-                
                 response = requests.post(OPENROUTER_API_URL, headers=headers, json=payload, stream=True, timeout=120)
                 response.raise_for_status()
                 
                 last_update = time.time()
-                
                 for line in response.iter_lines():
                     if line:
                         line_str = line.decode('utf-8')
                         if line_str.startswith('data: '):
                             data_str = line_str[6:]
-                            if data_str.strip() == '[DONE]':
-                                break
+                            if data_str.strip() == '[DONE]': break
                             try:
                                 chunk = json.loads(data_str)
                                 if 'choices' in chunk and len(chunk['choices']) > 0:
-                                    delta = chunk['choices'][0].get('delta', {})
-                                    content = delta.get('content', '')
+                                    content = chunk['choices'][0].get('delta', {}).get('content', '')
                                     if content:
                                         full_response += content
                                         token_count += 1
-                                        
                                         current_time = time.time()
                                         if current_time - last_update >= 0.5:
                                             elapsed = round(current_time - start_time, 1)
                                             tokens_per_sec = round(token_count / elapsed, 1) if elapsed > 0 else 0
                                             yield f"data: {json.dumps({'phase': 'generating', 'message': 'Generando respuesta...', 'tokens': token_count, 'tokens_per_sec': tokens_per_sec, 'elapsed': elapsed})}\n\n"
                                             last_update = current_time
-                            except json.JSONDecodeError:
-                                continue
+                            except json.JSONDecodeError: continue
             else:
-                # Llamar a Ollama (local)
                 payload = {
-                    "model": model,
-                    "prompt": prompt,
-                    "stream": True,
-                    "images": [base64_image],
-                    "format": "json",
-                    "options": {
-                        "temperature": 0.1,
-                        "num_predict": 1000
-                    }
+                    "model": model, "prompt": prompt, "stream": True, "images": [processed_b64], "format": "json",
+                    "options": {"temperature": 0.1, "num_predict": 1000}
                 }
-                
                 response = requests.post(OLLAMA_API_URL, json=payload, stream=True, timeout=600)
                 response.raise_for_status()
                 
                 last_update = time.time()
-                
                 for line in response.iter_lines():
                     if line:
                         try:
@@ -253,46 +223,25 @@ def process_invoice():
                             if 'response' in chunk:
                                 full_response += chunk['response']
                                 token_count += 1
-                                
                                 current_time = time.time()
                                 if current_time - last_update >= 0.5:
                                     elapsed = round(current_time - start_time, 1)
                                     tokens_per_sec = round(token_count / elapsed, 1) if elapsed > 0 else 0
                                     yield f"data: {json.dumps({'phase': 'generating', 'message': 'Generando respuesta...', 'tokens': token_count, 'tokens_per_sec': tokens_per_sec, 'elapsed': elapsed})}\n\n"
                                     last_update = current_time
-                            
-                            if chunk.get('done', False):
-                                break
-                        except json.JSONDecodeError:
-                            continue
+                            if chunk.get('done', False): break
+                        except json.JSONDecodeError: continue
             
-            # Intentar extraer JSON de la respuesta de forma robusta
+            elapsed = round(time.time() - start_time, 1)
             try:
-                # 1. Buscar el primer '{' y el último '}'
-                import re
                 json_match = re.search(r'({.*})', full_response, re.DOTALL)
-                if json_match:
-                    full_response = json_match.group(1)
-                
-                # 2. Limpieza básica de comentarios o texto extra si el regex fue muy amplio
-                # Intentamos parsear. Si falla, es que el modelo metió texto dentro.
+                if json_match: full_response = json_match.group(1)
                 output_data = json.loads(full_response)
             except json.JSONDecodeError:
-                # Si falla, último intento: limpiar líneas que no parezcan JSON
-                lines = full_response.split('\n')
-                cleaned_lines = [l for l in lines if any(c in l for c in '{}:",[]0123456789')]
-                try:
-                    output_data = json.loads("".join(cleaned_lines))
-                except:
-                    output_data = {"error": "Respuesta malformada", "raw": full_response}
+                output_data = {"error": "Respuesta malformada", "raw": full_response}
             
-            yield f"data: {json.dumps({'phase': 'complete', 'message': f'Completado en {elapsed}s', 'tokens': token_count, 'elapsed': elapsed, 'result': output_data})}\n\n"
+            yield f"data: {json.dumps({'phase': 'complete', 'message': f'Completado en {elapsed}s', 'tokens': token_count, 'elapsed': elapsed, 'result': output_data, 'processed_image': processed_b64})}\n\n"
             
-        except requests.exceptions.ConnectionError:
-            error_msg = "No se pudo conectar con OpenRouter" if provider == "openrouter" else "No se pudo conectar con Ollama. ¿Está el servidor corriendo?"
-            yield f"data: {json.dumps({'phase': 'error', 'message': error_msg})}\n\n"
-        except requests.exceptions.HTTPError as e:
-            yield f"data: {json.dumps({'phase': 'error', 'message': f'Error HTTP: {str(e)}'})}\n\n"
         except Exception as e:
             yield f"data: {json.dumps({'phase': 'error', 'message': str(e)})}\n\n"
     
