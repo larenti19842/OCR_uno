@@ -241,10 +241,10 @@ def process_invoice():
                 json_match = re.search(r'```json\s*({.*})\s*```', full_response, re.DOTALL)
                 if not json_match:
                     # 2. Buscar cualquier bloque de código ``` ... ```
-                    json_match = re.search(r'```\s*({.*})\s*```', full_response, re.DOTALL)
+                    json_match = re.search(r'```\s*({.*})?\s*```', full_response, re.DOTALL)
                 
                 clean_json = full_response
-                if json_match:
+                if json_match and json_match.group(1):
                     clean_json = json_match.group(1)
                 else:
                     # 3. Buscar el primer '{' y el último '}'
@@ -253,11 +253,27 @@ def process_invoice():
                     if start != -1 and end != -1:
                         clean_json = full_response[start:end+1]
                 
-                # Limpieza básica para evitar errores comunes de LLMs (comas finales, etc)
+                # 4. FIX: Evaluar expresiones matemáticas en valores numéricos
+                # Algunos modelos escriben "neto": 100 + 200 en lugar de "neto": 300
+                def eval_math_expr(match):
+                    expr = match.group(1)
+                    try:
+                        # Solo permitimos: números, +, -, *, /, (, ), espacios y .
+                        if re.match(r'^[\d\s\+\-\*\/\.\(\)]+$', expr):
+                            result = eval(expr, {"__builtins__": {}}, {})
+                            return str(round(result, 2))
+                    except:
+                        pass
+                    return expr
+                
+                # Buscar patrones como: 1234.00 + 5678.00 * 0.21
+                clean_json = re.sub(r':\s*([\d\.\s\+\-\*\/\(\)]+(?:\s*[\+\-\*\/]\s*[\d\.\s\+\-\*\/\(\)]+)+)', 
+                                   lambda m: ': ' + eval_math_expr(m), clean_json)
+                
                 clean_json = clean_json.strip()
                 output_data = json.loads(clean_json)
-            except json.JSONDecodeError:
-                output_data = {"error": "Respuesta malformada", "raw": full_response}
+            except json.JSONDecodeError as e:
+                output_data = {"error": f"Respuesta malformada: {str(e)}", "raw": full_response}
             
             yield f"data: {json.dumps({'phase': 'complete', 'message': f'Completado en {elapsed}s', 'tokens': token_count, 'elapsed': elapsed, 'result': output_data, 'processed_image': processed_b64})}\n\n"
             
