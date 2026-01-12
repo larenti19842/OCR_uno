@@ -233,10 +233,27 @@ def process_invoice():
                         except json.JSONDecodeError: continue
             
             elapsed = round(time.time() - start_time, 1)
+            # Intentar extraer JSON de la respuesta de forma robusta
             try:
-                json_match = re.search(r'({.*})', full_response, re.DOTALL)
-                if json_match: full_response = json_match.group(1)
-                output_data = json.loads(full_response)
+                # 1. Buscar bloques de código markdown ```json ... ```
+                json_match = re.search(r'```json\s*({.*})\s*```', full_response, re.DOTALL)
+                if not json_match:
+                    # 2. Buscar cualquier bloque de código ``` ... ```
+                    json_match = re.search(r'```\s*({.*})\s*```', full_response, re.DOTALL)
+                
+                clean_json = full_response
+                if json_match:
+                    clean_json = json_match.group(1)
+                else:
+                    # 3. Buscar el primer '{' y el último '}'
+                    start = full_response.find('{')
+                    end = full_response.rfind('}')
+                    if start != -1 and end != -1:
+                        clean_json = full_response[start:end+1]
+                
+                # Limpieza básica para evitar errores comunes de LLMs (comas finales, etc)
+                clean_json = clean_json.strip()
+                output_data = json.loads(clean_json)
             except json.JSONDecodeError:
                 output_data = {"error": "Respuesta malformada", "raw": full_response}
             

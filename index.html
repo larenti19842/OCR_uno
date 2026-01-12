@@ -889,6 +889,20 @@
                 </p>
             </div>
 
+            <!-- Logs de Procesamiento -->
+            <div class="card" id="logsCard" style="border-top: 4px solid var(--text-muted);">
+                <h3
+                    style="font-size: 0.9rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 1rem; display: flex; justify-content: space-between; align-items: center;">
+                    📋 Logs de Procesamiento
+                    <button class="secondary" onclick="document.getElementById('logContent').innerHTML = ''"
+                        style="padding: 2px 8px; font-size: 0.7rem;">Limpiar</button>
+                </h3>
+                <div id="logContent"
+                    style="background: rgba(0,0,0,0.4); border-radius: 0.5rem; padding: 1rem; font-family: 'JetBrains Mono', monospace; font-size: 0.8rem; height: 15rem; overflow-y: auto; color: #a1a1aa; border: 1px solid var(--border);">
+                    <!-- Eventos de log se insertarán aquí -->
+                </div>
+            </div>
+
             <div class="actions">
                 <button id="exportCsv">
                     <span>📥</span> Exportar CSV
@@ -898,7 +912,7 @@
                 </button>
             </div>
 
-            <details>
+            <details style="display: none;">
                 <summary>Ver JSON Crudo</summary>
                 <pre id="rawJson"></pre>
             </details>
@@ -1128,10 +1142,58 @@
                                 const jsonStr = trimmedLine.substring(6).trim();
                                 if (jsonStr) {
                                     const data = JSON.parse(jsonStr);
-                                    handleProgress(data);
+                                    // handleProgress(data); // Original call
+                                    // Inlined handleProgress logic with addLog calls
+                                    progressTitle.textContent = data.message || 'Procesando...';
+
+                                    if (data.elapsed) statTime.textContent = `${data.elapsed}s`;
+                                    if (data.tokens !== undefined) statTokens.textContent = data.tokens;
+                                    if (data.tokens_per_sec !== undefined) statSpeed.textContent = `${data.tokens_per_sec} t/s`;
+
+                                    switch (data.phase) {
+                                        case 'optimizing':
+                                            setPhase('optimize');
+                                            addLog(data.message);
+                                            break;
+                                        case 'optimized':
+                                            setPhase('optimize', true);
+                                            addLog(data.message, 'success');
+                                            break;
+                                        case 'sending':
+                                            setPhase('send');
+                                            addLog(data.message);
+                                            break;
+                                        case 'generating':
+                                            setPhase('send', true);
+                                            setPhase('generate');
+                                            addLog(data.message);
+                                            break;
+                                        case 'complete':
+                                            stopLocalTimer();
+                                            setPhase('generate', true);
+                                            setPhase('complete', true);
+                                            addLog(data.message, 'success');
+                                            if (data.result) {
+                                                currentData = data.result;
+                                                processingDetails.textContent = `${data.elapsed}s | ${data.tokens} tokens`;
+                                                displayResults(data.result);
+                                            }
+                                            if (data.processed_image) {
+                                                document.getElementById('imgProcessed').src = `data:image/jpeg;base64,${data.processed_image}`;
+                                            }
+                                            break;
+                                        case 'error':
+                                            stopLocalTimer();
+                                            addLog(`Error: ${data.message}`, 'error');
+                                            alert('Error: ' + data.message);
+                                            dropZone.style.display = 'block';
+                                            loader.style.display = 'none';
+                                            break;
+                                    }
                                 }
                             } catch (e) {
                                 console.error('Parse error:', e);
+                                addLog(`Error de parseo de datos del servidor: ${e.message}`, 'error');
                             }
                         }
                     }
@@ -1139,48 +1201,28 @@
             } catch (err) {
                 stopLocalTimer();
                 console.error('Stream error:', err);
+                addLog(`Error de conexión o procesamiento: ${err.message}`, 'error');
                 alert('Error: ' + err.message);
                 dropZone.style.display = 'block';
                 loader.style.display = 'none';
             }
         }
 
-        function handleProgress(data) {
-            progressTitle.textContent = data.message || 'Procesando...';
-
-            if (data.elapsed) statTime.textContent = `${data.elapsed}s`;
-            if (data.tokens !== undefined) statTokens.textContent = data.tokens;
-            if (data.tokens_per_sec !== undefined) statSpeed.textContent = `${data.tokens_per_sec} t/s`;
-
-            switch (data.phase) {
-                case 'optimizing': setPhase('optimize'); break;
-                case 'optimized': setPhase('optimize', true); break;
-                case 'sending': setPhase('send'); break;
-                case 'generating':
-                    setPhase('send', true);
-                    setPhase('generate');
-                    break;
-                case 'complete':
-                    stopLocalTimer();
-                    setPhase('generate', true);
-                    setPhase('complete', true);
-                    if (data.result) {
-                        currentData = data.result;
-                        processingDetails.textContent = `${data.elapsed}s | ${data.tokens} tokens`;
-                        displayResults(data.result);
-                    }
-                    break;
-                case 'error':
-                    stopLocalTimer();
-                    alert('Error: ' + data.message);
-                    dropZone.style.display = 'block';
-                    loader.style.display = 'none';
-                    break;
-            }
-        }
-
         function formatARS(val) {
             return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(val || 0);
+        }
+
+        function addLog(msg, type = 'info') {
+            const container = document.getElementById('logContent');
+            const time = new Date().toLocaleTimeString();
+            const color = type === 'error' ? '#f87171' : (type === 'success' ? '#4ade80' : '#a1a1aa');
+            const entry = document.createElement('div');
+            entry.style.marginBottom = '0.5rem';
+            entry.style.borderLeft = `2px solid ${color}`;
+            entry.style.paddingLeft = '0.5rem';
+            entry.innerHTML = `<span style="color: var(--text-muted); font-size: 0.7rem;">[${time}]</span> <span style="color: ${color}">${msg}</span>`;
+            container.appendChild(entry);
+            container.scrollTop = container.scrollHeight;
         }
 
         function displayResults(data) {
@@ -1192,6 +1234,11 @@
 
             if (data.error) {
                 // Si hay un error de parseo
+                addLog(`Error de extracción: ${data.error}`, 'error');
+                if (data.raw) {
+                    addLog(`Respuesta cruda del modelo:\n${data.raw}`, 'info');
+                }
+
                 document.getElementById('successBanner').style.background = 'rgba(239, 68, 68, 0.2)';
                 document.getElementById('successBanner').style.borderColor = '#ef4444';
                 document.getElementById('successBanner').querySelector('.text').textContent = 'Error de Extracción';
