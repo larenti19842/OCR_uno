@@ -146,9 +146,9 @@ def api_extract():
     if file.filename == '':
         return jsonify({"error": "No se seleccionó ningún archivo"}), 400
 
-    provider = request.form.get('provider', 'openrouter')
-    api_key = request.form.get('api_key', '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')
-    model = request.form.get('model', 'qwen/qwen-2.5-vl-7b-instruct:free')
+    provider = request.form.get('provider') or 'openrouter'
+    api_key = request.form.get('api_key') or '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'
+    model = request.form.get('model') or 'qwen/qwen-2.5-vl-7b-instruct:free'
 
     try:
         image_bytes = file.read()
