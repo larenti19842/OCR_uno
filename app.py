@@ -75,19 +75,21 @@ def get_extraction_prompt():
     Eres un experto contable y de OCR especializado en facturación de ARGENTINA (AFIP). 
     Analiza la imagen y extrae la información en un JSON estricto siguiendo las leyes fiscales locales.
 
-    PROHIBICIONES:
-    - NO incluyas ninguna nota, explicación o razonamiento fuera del JSON.
-    - NO incluyas metadatos o comentarios dentro del JSON.
-    - El resultado debe ser EXCLUSIVAMENTE el objeto JSON.
+    REGLAS DE ORO (CRÍTICAS):
+    1. VALORES NUMÉRICOS PUROS: Bajo ninguna circunstancia incluyas cálculos, sumas o fórmulas matemáticas dentro del JSON. 
+       - INCORRECTO: "neto": 100 + 200
+       - CORRECTO: "neto": 300.00
+    2. JSON ESTRICTO: Solo devuelve el objeto JSON. Sin texto antes ni después.
+    3. NO NOMBRES DE VARIABLES: Si el valor es una suma de varios ítems, haz la cuenta tú mismo y entrega solo el número final.
 
     INSTRUCCIONES FISCALES (ARGENTINA):
-    1. COMPROBANTE: Identifica la letra (A, B, C, M, E) y el tipo (Factura, Nota de Crédito, Ticket, etc). Extrae Punto de Venta (5 dígitos) y Número (8 dígitos). Extrae el CAE y su vencimiento.
-    2. EMISOR/RECEPTOR: Extrae Razon Social, CUIT (con guiones), Condición de IVA (RI, Monotributo, Exento) y Domicilio.
+    1. COMPROBANTE: Identifica la letra (A, B, C, M, E) y el tipo. Punto de Venta (5 dígitos) y Número (8 dígitos). Extrae el CAE y su vencimiento.
+    2. EMISOR/RECEPTOR: Extrae Razon Social, CUIT (con guiones), Condición de IVA y Domicilio.
     3. ÍTEMS: Extrae Cantidad, Descripción, Precio Unitario, Alícuota de IVA (21, 10.5, 27, 0) y Subtotal.
     4. IMPUESTOS (DESGLOSE): 
        - Subtotal Neto Gravado (separado por alícuota 21%, 10.5%, etc).
        - IVA Liquidado (separado por alícuota).
-       - Percepciones de IVA, IIBB (Ingresos Brutos), Impuestos Internos y Otros Tributos.
+       - Percepciones de IVA, IIBB, Impuestos Internos y Otros Tributos.
     5. TOTALES: Subtotal neto total, Total IVA total, Total Tributos y Importe Total Final.
 
     FORMATO DE SALIDA (JSON ESTRICTO):
