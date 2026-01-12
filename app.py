@@ -81,37 +81,45 @@ def optimize_image(image_bytes):
 
 def get_extraction_prompt():
     return """
-    Eres un experto en extracción de datos de facturas y OCR. Analiza la imagen y extrae la información en un JSON estricto.
-    
-    PROHIBICIONES CRÍTICAS:
-    - NO incluyas NINGUNA nota, explicación, razonamiento o texto fuera del JSON.
-    - NO incluyas metadatos o comentarios dentro del JSON.
-    - El resultado debe ser EXCLUSIVAMENTE el objeto JSON.
-    
-    INSTRUCCIONES DE EXTRACCIÓN:
-    1. CABECERA: Extrae el CUIT del emisor, punto de venta, número de factura y fecha.
-    2. ÍTEMS: 
-       - Los números en paréntesis como '(21.00)' son porcentajes de IVA (21%), NO los uses como cantidad. 
-       - Si la cantidad no es clara, asume 1.
-       - El precio unitario es el valor individual.
-       - El subtotal es el producto Cantidad x Precio o el valor a la derecha.
-    3. TOTALES: Extrae el Subtotal neto (antes de impuestos), otros tributos/tasas y el Total Final.
-    
+    Eres un experto contable y de OCR especializado en facturación de ARGENTINA (AFIP). 
+    Analiza la imagen y extrae la información en un JSON estricto siguiendo las leyes fiscales locales.
+
+    PROHIBICIONES:
+    - NO incluyas ninguna nota, explicación o razonamiento fuera del JSON.
+    - NO inventes datos. Si un campo no existe o es ilegible, coloca null o 0 según corresponda.
+
+    INSTRUCCIONES FISCALES (ARGENTINA):
+    1. COMPROBANTE: Identifica la letra (A, B, C, M, E) y el tipo (Factura, Nota de Crédito, Ticket, etc). Extrae Punto de Venta (5 dígitos) y Número (8 dígitos). Extrae el CAE y su vencimiento.
+    2. EMISOR/RECEPTOR: Extrae Razon Social, CUIT (con guiones), Condición de IVA (RI, Monotributo, Exento) y Domicilio.
+    3. ÍTEMS: Extrae Cantidad, Descripción, Precio Unitario, Alícuota de IVA (21, 10.5, 27, 0) y Subtotal.
+    4. IMPUESTOS (DESGLOSE): 
+       - Subtotal Neto Gravado (separado por alícuota 21%, 10.5%, etc).
+       - IVA Liquidado (separado por alícuota).
+       - Percepciones de IVA, IIBB (Ingresos Brutos), Impuestos Internos y Otros Tributos.
+    5. TOTALES: Subtotal neto total, Total IVA total, Total Tributos y Importe Total Final.
+
     FORMATO DE SALIDA (JSON ESTRICTO):
     {
-      "cabecera": {
-        "cuit_emisor": "",
-        "punto_venta": "",
-        "numero_factura": "",
-        "fecha": ""
+      "comprobante": {
+        "tipo": "Factura", "letra": "A", "punto_venta": "", "numero": "",
+        "fecha_emision": "", "fecha_vencimiento": "", "cae": "", "vto_cae": "", "condicion_venta": ""
+      },
+      "emisor": {
+        "razon_social": "", "cuit": "", "condicion_iva": "", "domicilio": "", "iibb": ""
+      },
+      "receptor": {
+        "razon_social": "", "cuit": "", "condicion_iva": "", "domicilio": ""
       },
       "items": [
-        {"descripcion": "", "cantidad": 1, "precio_unitario": 0.0, "subtotal": 0.0}
+        {"cantidad": 1, "descripcion": "", "precio_unitario": 0.0, "alicuota_iva": 21.0, "subtotal": 0.0}
       ],
+      "impuestos": {
+        "neto_gravado_21": 0.0, "neto_gravado_10_5": 0.0, "neto_gravado_27": 0.0,
+        "iva_21": 0.0, "iva_10_5": 0.0, "iva_27": 0.0,
+        "percepcion_iva": 0.0, "percepcion_iibb": 0.0, "otros_tributos": 0.0
+      },
       "totales": {
-        "subtotal": 0.0,
-        "otros_tributos": 0.0,
-        "total_final": 0.0
+        "subtotal_neto": 0.0, "total_iva": 0.0, "total_tributos": 0.0, "total": 0.0
       }
     }
     """

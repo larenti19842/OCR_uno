@@ -730,69 +730,139 @@
         </div>
 
         <div id="results" class="results-container">
-            <div class="card header-info-card" id="headerInfoCard"
-                style="display: none; margin-bottom: 1rem; padding: 1.5rem;">
-                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem;">
-                    <div>
-                        <span style="color: var(--text-muted); font-size: 0.8rem; display: block;">CUIT Emisor</span>
-                        <strong id="headerCuit">-</strong>
-                    </div>
-                    <div>
-                        <span style="color: var(--text-muted); font-size: 0.8rem; display: block;">Nro Factura</span>
-                        <strong id="headerNumber">-</strong>
-                    </div>
-                    <div>
-                        <span style="color: var(--text-muted); font-size: 0.8rem; display: block;">Fecha</span>
-                        <strong id="headerDate">-</strong>
-                    </div>
-                </div>
-            </div>
-
-            <div class="card">
-                <div class="success-banner" id="successBanner">
+            <!-- Banner de Éxito/Error -->
+            <div class="card" style="padding: 1rem; margin-bottom: 1rem; border: none;">
+                <div class="success-banner" id="successBanner" style="margin-bottom: 0;">
                     <span class="icon">✅</span>
                     <span class="text">Procesamiento completado</span>
                     <span class="details" id="processingDetails"></span>
                 </div>
+            </div>
 
-                <h2>Detalle de Ítems</h2>
+            <!-- Datos del Comprobante -->
+            <div class="card comprobante-card" id="comprobanteCard"
+                style="display: none; border-top: 4px solid var(--primary);">
+                <div
+                    style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; border-bottom: 1px solid var(--border); padding-bottom: 1rem;">
+                    <h2 style="margin-bottom: 0;">📦 Comprobante</h2>
+                    <div id="voucherBadge"
+                        style="background: var(--primary); padding: 0.25rem 0.75rem; border-radius: 2rem; font-weight: 600; font-size: 0.9rem;">
+                        -</div>
+                </div>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1.5rem;">
+                    <div>
+                        <span style="color: var(--text-muted); font-size: 0.8rem; display: block;">Número</span>
+                        <strong id="vNumber" style="font-size: 1.1rem; color: var(--accent);">-</strong>
+                    </div>
+                    <div>
+                        <span style="color: var(--text-muted); font-size: 0.8rem; display: block;">Fecha</span>
+                        <strong id="vDate">-</strong>
+                    </div>
+                    <div>
+                        <span style="color: var(--text-muted); font-size: 0.8rem; display: block;">CAE / Vto CAE</span>
+                        <strong id="vCae">-</strong>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Emisor y Receptor -->
+            <div
+                style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem; margin-bottom: 2rem;">
+                <!-- Emisor -->
+                <div class="card" id="emisorCard" style="margin-bottom: 0; border-left: 4px solid var(--accent);">
+                    <h3
+                        style="font-size: 1rem; color: var(--text-muted); margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem;">
+                        🏢 Emisor</h3>
+                    <div style="margin-bottom: 0.75rem;">
+                        <strong id="eName" style="display: block; font-size: 1.1rem; margin-bottom: 0.25rem;">-</strong>
+                        <span id="eCuit" style="color: var(--accent); font-weight: 600;">-</span>
+                    </div>
+                    <div style="font-size: 0.9rem; color: var(--text-muted);">
+                        <p id="eCond">-</p>
+                        <p id="eDir" style="margin-top: 0.25rem;">-</p>
+                    </div>
+                </div>
+                <!-- Receptor -->
+                <div class="card" id="receptorCard" style="margin-bottom: 0; border-left: 4px solid var(--primary);">
+                    <h3
+                        style="font-size: 1rem; color: var(--text-muted); margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem;">
+                        👤 Receptor</h3>
+                    <div style="margin-bottom: 0.75rem;">
+                        <strong id="rName" style="display: block; font-size: 1.1rem; margin-bottom: 0.25rem;">-</strong>
+                        <span id="rCuit" style="color: var(--accent); font-weight: 600;">-</span>
+                    </div>
+                    <div style="font-size: 0.9rem; color: var(--text-muted);">
+                        <p id="rCond">-</p>
+                        <p id="rDir" style="margin-top: 0.25rem;">-</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Detalle de Ítems -->
+            <div class="card">
+                <h2>📋 Detalle de Ítems</h2>
                 <div style="overflow-x: auto;">
                     <table id="itemsTable">
                         <thead>
                             <tr>
-                                <th>Descripción</th>
-                                <th>Cantidad</th>
-                                <th>P. Unitario</th>
-                                <th>Subtotal</th>
+                                <th>CANT.</th>
+                                <th>DESCRIPCIÓN</th>
+                                <th>IVA</th>
+                                <th style="text-align: right;">P. UNIT</th>
+                                <th style="text-align: right;">SUBTOTAL</th>
                             </tr>
                         </thead>
                         <tbody></tbody>
                     </table>
                 </div>
+            </div>
 
-                <div class="totales-grid">
-                    <div class="total-item">
-                        <span>Subtotal Neto</span>
-                        <strong id="totalSubtotal">$0.00</strong>
-                    </div>
-                    <div class="total-item">
-                        <span>Otros Tributos</span>
-                        <strong id="totalTributos">$0.00</strong>
-                    </div>
-                    <div class="total-item highlight-total">
-                        <span>Total Final</span>
-                        <strong id="totalFinal">$0.00</strong>
+            <!-- Desglose de Impuestos y Totales -->
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem;">
+                <!-- Desglose de IVA -->
+                <div class="card" style="margin-bottom: 0; background: rgba(0,0,0,0.2);">
+                    <h3
+                        style="font-size: 0.9rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 1.5rem;">
+                        🏷️ Desglose Fiscal</h3>
+                    <div id="taxBreakdown" style="display: flex; flex-direction: column; gap: 0.75rem;">
+                        <!-- JS populated -->
                     </div>
                 </div>
-
-                <div class="actions">
-                    <button id="exportCsv">
-                        <span>📥</span> Exportar CSV
-                    </button>
-                    <button class="secondary" onclick="location.reload()">
-                        <span>🔄</span> Nueva Factura
-                    </button>
+                <!-- Totales -->
+                <div class="card"
+                    style="margin-bottom: 0; background: rgba(99, 102, 241, 0.05); border: 1px solid rgba(99, 102, 241, 0.2);">
+                    <h3
+                        style="font-size: 0.9rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 1.5rem;">
+                        💰 Liquidación Final</h3>
+                    <div style="display: flex; flex-direction: column; gap: 1rem;">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <span style="color: var(--text-muted);">Subtotal Neto</span>
+                            <strong id="totalSubtotal" style="font-size: 1.2rem;">$0,00</strong>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <span style="color: var(--text-muted);">IVA Liquidado</span>
+                            <span id="totalIva" style="color: var(--accent); font-weight: 600;">$0,00</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <span style="color: var(--text-muted);">Otros Impuestos</span>
+                            <span id="totalTributos" style="color: var(--warning); font-weight: 600;">$0,00</span>
+                        </div>
+                        <div
+                            style="margin-top: 1rem; padding-top: 1rem; border-top: 2px dashed var(--border); display: flex; justify-content: space-between; align-items: center;">
+                            <span style="font-weight: 600; font-size: 1.1rem; color: var(--primary);">TOTAL</span>
+                            <strong id="totalFinal" style="font-size: 2rem; color: var(--text-main);">$0,00</strong>
+                        </div>
+                    </div>
                 </div>
+            </div>
+
+            <div class="actions">
+                <button id="exportCsv">
+                    <span>📥</span> Exportar CSV
+                </button>
+                <button class="secondary" onclick="location.reload()">
+                    <span>🔄</span> Nueva Factura
+                </button>
             </div>
 
             <details>
@@ -1071,6 +1141,10 @@
             }
         }
 
+        function formatARS(val) {
+            return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(val || 0);
+        }
+
         function displayResults(data) {
             loader.style.display = 'none';
             results.style.display = 'block';
@@ -1079,54 +1153,95 @@
             rawJson.textContent = JSON.stringify(data, null, 2);
 
             if (data.error) {
-                // Si hay un error de parseo, mostramos el banner de error y ocultamos tablas
+                // Si hay un error de parseo
                 document.getElementById('successBanner').style.background = 'rgba(239, 68, 68, 0.2)';
                 document.getElementById('successBanner').style.borderColor = '#ef4444';
                 document.getElementById('successBanner').querySelector('.text').textContent = 'Error de Extracción';
                 document.getElementById('successBanner').querySelector('.text').style.color = '#ef4444';
                 document.getElementById('successBanner').querySelector('.icon').textContent = '❌';
-                document.getElementById('headerInfoCard').style.display = 'none';
-                itemsTableBody.innerHTML = '<tr><td colspan="4" style="text-align:center">No se pudieron extraer los ítems</td></tr>';
+                document.getElementById('comprobanteCard').style.display = 'none';
+                itemsTableBody.innerHTML = '<tr><td colspan="5" style="text-align:center">No se pudieron extraer los ítems</td></tr>';
                 return;
             }
 
-            // Restaurar banner por si venimos de un error
+            // Restaurar banner
             document.getElementById('successBanner').style.background = '';
             document.getElementById('successBanner').style.borderColor = '';
             document.getElementById('successBanner').querySelector('.text').textContent = 'Procesamiento completado';
             document.getElementById('successBanner').querySelector('.text').style.color = '';
             document.getElementById('successBanner').querySelector('.icon').textContent = '✅';
 
-            // Cabecera
-            if (data.cabecera) {
-                document.getElementById('headerInfoCard').style.display = 'block';
-                document.getElementById('headerCuit').textContent = data.cabecera.cuit_emisor || '-';
-                document.getElementById('headerNumber').textContent = (data.cabecera.punto_venta ? data.cabecera.punto_venta + '-' : '') + (data.cabecera.numero_factura || '-');
-                document.getElementById('headerDate').textContent = data.cabecera.fecha || '-';
-            } else {
-                document.getElementById('headerInfoCard').style.display = 'none';
+            // 1. Datos del Comprobante
+            if (data.comprobante) {
+                document.getElementById('comprobanteCard').style.display = 'block';
+                const comp = data.comprobante;
+                document.getElementById('voucherBadge').textContent = `${comp.tipo || 'Comprobante'} ${comp.letra || ''}`;
+                document.getElementById('vNumber').textContent = (comp.punto_venta ? comp.punto_venta.toString().padStart(5, '0') + '-' : '') + (comp.numero ? comp.numero.toString().padStart(8, '0') : '-');
+                document.getElementById('vDate').textContent = comp.fecha_emision || '-';
+                document.getElementById('vCae').textContent = `${comp.cae || 'N/A'} (Vto: ${comp.vto_cae || 'N/A'})`;
             }
 
+            // 2. Emisor y Receptor
+            if (data.emisor) {
+                document.getElementById('eName').textContent = data.emisor.razon_social || '-';
+                document.getElementById('eCuit').textContent = data.emisor.cuit || '-';
+                document.getElementById('eCond').textContent = data.emisor.condicion_iva || '-';
+                document.getElementById('eDir').textContent = data.emisor.domicilio || '';
+            }
+            if (data.receptor) {
+                document.getElementById('rName').textContent = data.receptor.razon_social || '-';
+                document.getElementById('rCuit').textContent = data.receptor.cuit || '-';
+                document.getElementById('rCond').textContent = data.receptor.condicion_iva || '-';
+                document.getElementById('rDir').textContent = data.receptor.domicilio || '';
+            }
+
+            // 3. Ítems
             itemsTableBody.innerHTML = '';
             const items = data.items || [];
             items.forEach(item => {
                 const row = document.createElement('tr');
                 row.innerHTML = `
-                    <td>${item.descripcion || '-'}</td>
                     <td>${item.cantidad || 0}</td>
-                    <td>$${Number(item.precio_unitario || 0).toLocaleString()}</td>
-                    <td>$${Number(item.subtotal || 0).toLocaleString()}</td>
+                    <td>${item.descripcion || '-'}</td>
+                    <td><span style="font-size:0.8rem; background:rgba(255,255,255,0.1); padding:2px 6px; border-radius:4px">${item.alicuota_iva || 0}%</span></td>
+                    <td style="text-align: right;">${formatARS(item.precio_unitario)}</td>
+                    <td style="text-align: right; font-weight:600">${formatARS(item.subtotal)}</td>
                 `;
                 itemsTableBody.appendChild(row);
             });
 
-            const subtotal = data.subtotal_total || (data.totales && data.totales.subtotal) || 0;
-            const tributos = data.otros_tributos || (data.totales && data.totales.otros_tributos) || 0;
-            const total = data.total_final || (data.totales && data.totales.total_final) || (data.totales && data.totales.total) || 0;
+            // 4. Desglose de Impuestos
+            const taxDiv = document.getElementById('taxBreakdown');
+            taxDiv.innerHTML = '';
+            const taxes = data.impuestos || {};
 
-            document.getElementById('totalSubtotal').textContent = `$${Number(subtotal).toLocaleString()}`;
-            document.getElementById('totalTributos').textContent = `$${Number(tributos).toLocaleString()}`;
-            document.getElementById('totalFinal').textContent = `$${Number(total).toLocaleString()}`;
+            // Agrupar netos por alícuota
+            const nets = [
+                { label: 'Neto Gravado 21%', val: taxes.neto_gravado_21 },
+                { label: 'Neto Gravado 10.5%', val: taxes.neto_gravado_10_5 },
+                { label: 'Neto Gravado 27%', val: taxes.neto_gravado_27 },
+                { label: 'Percepción IVA', val: taxes.percepcion_iva, color: 'var(--warning)' },
+                { label: 'Percepción IIBB', val: taxes.percepcion_iibb, color: 'var(--warning)' },
+                { label: 'Otros Tributos', val: taxes.otros_tributos, color: 'var(--warning)' }
+            ];
+
+            nets.forEach(n => {
+                if (n.val > 0) {
+                    const line = document.createElement('div');
+                    line.style.display = 'flex';
+                    line.style.justifyContent = 'space-between';
+                    line.style.fontSize = '0.9rem';
+                    line.innerHTML = `<span style="color:var(--text-muted)">${n.label}</span><span style="color:${n.color || 'inherit'}">${formatARS(n.val)}</span>`;
+                    taxDiv.appendChild(line);
+                }
+            });
+
+            // 5. Totales
+            const totals = data.totales || {};
+            document.getElementById('totalSubtotal').textContent = formatARS(totals.subtotal_neto);
+            document.getElementById('totalIva').textContent = formatARS(totals.total_iva);
+            document.getElementById('totalTributos').textContent = formatARS(totals.total_tributos);
+            document.getElementById('totalFinal').textContent = formatARS(totals.total);
         }
 
         document.getElementById('exportCsv').addEventListener('click', () => {
