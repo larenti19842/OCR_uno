@@ -147,7 +147,7 @@ def api_extract():
         return jsonify({"error": "No se seleccionó ningún archivo"}), 400
 
     provider = (request.form.get('provider') or 'openrouter').strip().lower()
-    api_key = (request.form.get('api_key') or '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').strip()
+    api_key = (request.form.get('api_key') or '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').strip()
     model = (request.form.get('model') or 'qwen/qwen-2.5-vl-7b-instruct:free').strip()
     
     # Debug print (servidor)
@@ -242,7 +242,7 @@ def process_invoice():
         return jsonify({"error": "No se seleccionó ningún archivo"}), 400
 
     provider = (request.form.get('provider') or 'openrouter').strip().lower()
-    api_key = (request.form.get('api_key') or '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').strip()
+    api_key = (request.form.get('api_key') or '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').strip()
     model = (request.form.get('model') or 'qwen/qwen-2.5-vl-7b-instruct:free').strip()
 
     try:
