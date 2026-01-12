@@ -126,6 +126,109 @@ def index():
 def get_models():
     return jsonify(OPENROUTER_MODELS)
 
+@app.route('/api/extract', methods=['POST'])
+def api_extract():
+    """
+    API REST para extracción de datos de facturas.
+    
+    Params (multipart/form-data):
+    - file: Imagen de la factura (required)
+    - provider: 'ollama' o 'openrouter' (default: 'ollama')
+    - model: Nombre del modelo (default: ministral-facturador-full)
+    - api_key: API key de OpenRouter (required si provider=openrouter)
+    
+    Returns: JSON con los datos extraídos
+    """
+    if 'file' not in request.files:
+        return jsonify({"error": "No hay archivo en la petición"}), 400
+    
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({"error": "No se seleccionó ningún archivo"}), 400
+
+    provider = request.form.get('provider', 'openrouter')
+    api_key = request.form.get('api_key', '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')
+    model = request.form.get('model', 'qwen/qwen-2.5-vl-7b-instruct:free')
+
+    try:
+        image_bytes = file.read()
+        optimized_data = optimize_image(image_bytes)
+        processed_b64 = base64.b64encode(optimized_data).decode('utf-8')
+        prompt = get_extraction_prompt()
+        
+        full_response = ""
+        
+        if provider == "openrouter":
+            if not api_key:
+                return jsonify({"error": "Se requiere api_key para OpenRouter"}), 400
+            headers = {
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+                "HTTP-Referer": "http://localhost:5000",
+                "X-Title": "Invoice OCR Pro API"
+            }
+            payload = {
+                "model": model,
+                "messages": [{"role": "user", "content": [
+                    {"type": "text", "text": prompt},
+                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{processed_b64}"}}
+                ]}],
+                "temperature": 0.1,
+                "max_tokens": 2000
+            }
+            response = requests.post(OPENROUTER_API_URL, headers=headers, json=payload, timeout=120)
+            response.raise_for_status()
+            result = response.json()
+            if 'choices' in result and len(result['choices']) > 0:
+                full_response = result['choices'][0].get('message', {}).get('content', '')
+        else:
+            payload = {
+                "model": model, "prompt": prompt, "stream": False, "images": [processed_b64], "format": "json",
+                "options": {"temperature": 0.1, "num_predict": 2000}
+            }
+            response = requests.post(OLLAMA_API_URL, json=payload, timeout=600)
+            response.raise_for_status()
+            result = response.json()
+            full_response = result.get('response', '')
+        
+        # Limpiar y parsear JSON
+        json_match = re.search(r'```json\s*({.*})\s*```', full_response, re.DOTALL)
+        if not json_match:
+            json_match = re.search(r'```\s*({.*})?\s*```', full_response, re.DOTALL)
+        
+        clean_json = full_response
+        if json_match and json_match.group(1):
+            clean_json = json_match.group(1)
+        else:
+            start = full_response.find('{')
+            end = full_response.rfind('}')
+            if start != -1 and end != -1:
+                clean_json = full_response[start:end+1]
+        
+        # Evaluar expresiones matemáticas
+        def eval_math_expr(match):
+            expr = match.group(1)
+            try:
+                if re.match(r'^[\d\s\+\-\*\/\.\(\)]+$', expr):
+                    result = eval(expr, {"__builtins__": {}}, {})
+                    return str(round(result, 2))
+            except:
+                pass
+            return expr
+        
+        clean_json = re.sub(r':\s*([\d\.\s\+\-\*\/\(\)]+(?:\s*[\+\-\*\/]\s*[\d\.\s\+\-\*\/\(\)]+)+)', 
+                           lambda m: ': ' + eval_math_expr(m), clean_json)
+        
+        output_data = json.loads(clean_json.strip())
+        return jsonify(output_data)
+        
+    except json.JSONDecodeError as e:
+        return jsonify({"error": f"Respuesta malformada: {str(e)}", "raw": full_response}), 422
+    except requests.exceptions.RequestException as e:
+        return jsonify({"error": f"Error de conexión: {str(e)}"}), 502
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 @app.route('/process', methods=['POST'])
 def process_invoice():
     if 'file' not in request.files:
