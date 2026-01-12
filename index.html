@@ -628,7 +628,7 @@
                         <div class="form-group">
                             <label>Modelo de Ollama</label>
                             <input type="text" id="ollamaModel" value="ministral-facturador-full"
-                                placeholder="nombre-del-modelo">
+                                placeholder="nombre-del-modelo" onchange="saveSettings()">
                         </div>
                     </div>
                     <div class="status-indicator">
@@ -643,14 +643,15 @@
                         <div class="form-group">
                             <label>API Key de OpenRouter</label>
                             <div class="api-key-input">
-                                <input type="password" id="openrouterApiKey" placeholder="sk-or-v1-...">
+                                <input type="password" id="openrouterApiKey" placeholder="sk-or-v1-..."
+                                    onchange="saveSettings()">
                                 <button type="button" class="toggle-visibility"
                                     onclick="toggleApiKeyVisibility()">👁️</button>
                             </div>
                         </div>
                         <div class="form-group">
                             <label>Modelo</label>
-                            <select id="openrouterModel">
+                            <select id="openrouterModel" onchange="saveSettings()">
                                 <option value="qwen/qwen-2.5-vl-7b-instruct:free">Qwen 2.5 VL 7B (Free)</option>
                                 <option value="mistralai/ministral-3b">Ministral 3B</option>
                                 <option value="google/gemini-2.0-flash-001">Gemini 2.0 Flash</option>
@@ -949,9 +950,8 @@
         // Initialize
         document.addEventListener('DOMContentLoaded', () => {
             loadSettings();
-            setProvider(currentProvider);
             checkOllamaConnection();
-            refreshModels(); // Sync with backend
+            refreshModels();
         });
 
         async function refreshModels() {
@@ -970,7 +970,6 @@
                         select.appendChild(opt);
                     });
 
-                    // Restore selection if still available
                     if ([...select.options].some(o => o.value === currentVal)) {
                         select.value = currentVal;
                     }
@@ -980,21 +979,63 @@
             }
         }
 
-        function loadSettings() {
+        async function loadSettings() {
+            // 1. Intentar cargar desde el servidor (Sincronización con Postman)
+            try {
+                const response = await fetch('/api/config');
+                if (response.ok) {
+                    const config = await response.json();
+                    if (config.provider) {
+                        currentProvider = config.provider;
+                        setProvider(currentProvider);
+                    }
+                    if (config.api_key) document.getElementById('openrouterApiKey').value = config.api_key;
+                    if (config.model_openrouter) document.getElementById('openrouterModel').value = config.model_openrouter;
+                    if (config.model_ollama) document.getElementById('ollamaModel').value = config.model_ollama;
+                    return; // Ya cargamos todo desde el servidor
+                }
+            } catch (e) {
+                console.warn('No se pudo cargar config del servidor, usando local', e);
+            }
+
+            // 2. Fallback: LocalStorage
             const apiKey = localStorage.getItem('openrouter_api_key') || '';
-            const model = localStorage.getItem('openrouter_model') || 'google/gemini-2.0-flash-001';
+            const model = localStorage.getItem('openrouter_model') || 'qwen/qwen-2.5-vl-7b-instruct:free';
             const ollamaModel = localStorage.getItem('ollama_model') || 'ministral-facturador-full';
 
             document.getElementById('openrouterApiKey').value = apiKey;
             document.getElementById('openrouterModel').value = model;
             document.getElementById('ollamaModel').value = ollamaModel;
+            setProvider(localStorage.getItem('ocr_provider') || 'openrouter');
         }
 
-        function saveSettings() {
-            localStorage.setItem('provider', currentProvider);
+        function saveSettingsToLocal() {
+            localStorage.setItem('ocr_provider', currentProvider);
             localStorage.setItem('openrouter_api_key', document.getElementById('openrouterApiKey').value);
             localStorage.setItem('openrouter_model', document.getElementById('openrouterModel').value);
             localStorage.setItem('ollama_model', document.getElementById('ollamaModel').value);
+        }
+
+        async function saveSettings() {
+            saveSettingsToLocal();
+
+            // Sincronizar con el servidor
+            const config = {
+                provider: currentProvider,
+                api_key: document.getElementById('openrouterApiKey').value.trim(),
+                model_openrouter: document.getElementById('openrouterModel').value,
+                model_ollama: document.getElementById('ollamaModel').value
+            };
+
+            try {
+                await fetch('/api/config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(config)
+                });
+            } catch (e) {
+                console.error("Error al sincronizar con el servidor:", e);
+            }
         }
 
         function toggleSettings() {

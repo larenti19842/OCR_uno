@@ -1,0 +1,6 @@
+{
+  "provider": "openrouter",
+  "api_key": "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",
+  "model_openrouter": "qwen/qwen-2.5-vl-7b-instruct:free",
+  "model_ollama": "ministral-facturador-full"
+}

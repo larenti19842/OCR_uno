@@ -12,7 +12,8 @@ from PIL import Image, ImageEnhance, ImageFilter, ImageOps
 app = Flask(__name__, static_folder='.')
 CORS(app)
 
-# Configuración por defecto
+# Configuración por defecto y archivos
+CONFIG_FILE = "config.json"
 OLLAMA_API_URL = "http://localhost:11434/api/generate"
 OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
 DEFAULT_OLLAMA_MODEL = "ministral-facturador-full"
@@ -31,6 +32,28 @@ OPENROUTER_MODELS = [
     {"id": "qwen/qwen2.5-vl-72b-instruct", "name": "Qwen 2.5 VL 72B"},
 ]
 
+def load_config():
+    if os.path.exists(CONFIG_FILE):
+        try:
+            with open(CONFIG_FILE, "r") as f:
+                return json.load(f)
+        except: pass
+    return {
+        "provider": "openrouter",
+        "api_key": "",
+        "model_openrouter": "qwen/qwen-2.5-vl-7b-instruct:free",
+        "model_ollama": DEFAULT_OLLAMA_MODEL
+    }
+
+def save_config(data):
+    try:
+        current = load_config()
+        current.update(data)
+        with open(CONFIG_FILE, "w") as f:
+            json.dump(current, f, indent=2)
+        return True
+    except: return False
+
 def optimize_image(image_bytes):
     """
     Optimiza la imagen para OCR con alta fidelidad:
@@ -38,34 +61,21 @@ def optimize_image(image_bytes):
     - Especial énfasis en nitidez de bordes
     """
     img = Image.open(io.BytesIO(image_bytes))
+    if img.mode in ('RGBA', 'P'): img = img.convert('RGB')
     
-    if img.mode in ('RGBA', 'P'):
-        img = img.convert('RGB')
-    
-    # 1. Redimensionar
     max_width = 1024
     if img.width > max_width:
         ratio = max_width / float(img.width)
         new_height = int(float(img.height) * float(ratio))
         img = img.resize((max_width, new_height), Image.Resampling.LANCZOS)
     
-    # 2. Convertir a escala de grises
     img = img.convert('L')
-    
-    # 3. Autocontrast avanzado (elimina ruidos en blancos/negros extremos)
     img = ImageOps.autocontrast(img, cutoff=0.5)
-    
-    # 4. Aumento de contraste (+40%)
     enhancer = ImageEnhance.Contrast(img)
     img = enhancer.enhance(1.40)
-    
-    # 5. Nitidez extrema para OCR
     img = img.filter(ImageFilter.UnsharpMask(radius=1.0, percent=200, threshold=1))
-    
-    # 6. Borde protector
     img = ImageOps.expand(img, border=15, fill='white')
     
-    # 7. Guardar
     buffer = io.BytesIO()
     img.save(buffer, format="JPEG", quality=95, optimize=True)
     return buffer.getvalue()
@@ -126,19 +136,20 @@ def index():
 def get_models():
     return jsonify(OPENROUTER_MODELS)
 
+@app.route('/api/config', methods=['GET', 'POST'])
+def manage_config():
+    if request.method == 'POST':
+        data = request.json
+        if save_config(data):
+            return jsonify({"status": "success", "message": "Configuración guardada en el servidor"})
+        return jsonify({"status": "error", "message": "Error al guardar configuración"}), 500
+    else:
+        return jsonify(load_config())
+
 @app.route('/api/extract', methods=['POST'])
 def api_extract():
-    """
-    API REST para extracción de datos de facturas.
+    config = load_config()
     
-    Params (multipart/form-data):
-    - file: Imagen de la factura (required)
-    - provider: 'ollama' o 'openrouter' (default: 'ollama')
-    - model: Nombre del modelo (default: ministral-facturador-full)
-    - api_key: API key de OpenRouter (required si provider=openrouter)
-    
-    Returns: JSON con los datos extraídos
-    """
     if 'file' not in request.files:
         return jsonify({"error": "No hay archivo en la petición"}), 400
     
@@ -146,11 +157,12 @@ def api_extract():
     if file.filename == '':
         return jsonify({"error": "No se seleccionó ningún archivo"}), 400
 
-    provider = (request.form.get('provider') or 'openrouter').strip().lower()
-    api_key = (request.form.get('api_key') or '').strip()
-    model = (request.form.get('model') or 'qwen/qwen-2.5-vl-7b-instruct:free').strip()
+    provider = (request.form.get('provider') or config.get('provider', 'openrouter')).strip().lower()
+    api_key = (request.form.get('api_key') or config.get('api_key', '')).strip()
     
-    # Debug print (servidor)
+    default_model = config.get('model_openrouter' if provider == 'openrouter' else 'model_ollama')
+    model = (request.form.get('model') or default_model or DEFAULT_OLLAMA_MODEL).strip()
+    
     print(f"API Request: Provider={provider}, Model={model}, Key={api_key[:10]}...")
 
     try:
@@ -163,7 +175,7 @@ def api_extract():
         
         if provider == "openrouter":
             if not api_key:
-                return jsonify({"error": "Se requiere api_key para OpenRouter"}), 400
+                return jsonify({"error": "Se requiere api_key para OpenRouter (configúrala en la web o envíala en el form)"}), 400
             headers = {
                 "Authorization": f"Bearer {api_key}",
                 "Content-Type": "application/json",
@@ -180,15 +192,10 @@ def api_extract():
                 "max_tokens": 2000
             }
             response = requests.post(OPENROUTER_API_URL, headers=headers, json=payload, timeout=120)
-            
-            # Si hay error, intentamos sacar el mensaje de OpenRouter
             if response.status_code != 200:
-                try:
-                    err_json = response.json()
-                    err_msg = err_json.get('error', {}).get('message', response.text)
-                    return jsonify({"error": f"OpenRouter Error ({response.status_code}): {err_msg}"}), response.status_code
-                except:
-                    return jsonify({"error": f"OpenRouter Error ({response.status_code}): {response.text}"}), response.status_code
+                try: err_msg = response.json().get('error', {}).get('message', response.text)
+                except: err_msg = response.text
+                return jsonify({"error": f"OpenRouter Error ({response.status_code}): {err_msg}"}), response.status_code
             
             result = response.json()
             if 'choices' in result and len(result['choices']) > 0:
@@ -205,27 +212,22 @@ def api_extract():
         
         # Limpiar y parsear JSON
         json_match = re.search(r'```json\s*({.*})\s*```', full_response, re.DOTALL)
-        if not json_match:
-            json_match = re.search(r'```\s*({.*})?\s*```', full_response, re.DOTALL)
+        if not json_match: json_match = re.search(r'```\s*({.*})?\s*```', full_response, re.DOTALL)
         
         clean_json = full_response
-        if json_match and json_match.group(1):
-            clean_json = json_match.group(1)
+        if json_match and json_match.group(1): clean_json = json_match.group(1)
         else:
             start = full_response.find('{')
             end = full_response.rfind('}')
-            if start != -1 and end != -1:
-                clean_json = full_response[start:end+1]
+            if start != -1 and end != -1: clean_json = full_response[start:end+1]
         
-        # Evaluar expresiones matemáticas
         def eval_math_expr(match):
             expr = match.group(1)
             try:
                 if re.match(r'^[\d\s\+\-\*\/\.\(\)]+$', expr):
                     result = eval(expr, {"__builtins__": {}}, {})
                     return str(round(result, 2))
-            except:
-                pass
+            except: pass
             return expr
         
         clean_json = re.sub(r':\s*([\d\.\s\+\-\*\/\(\)]+(?:\s*[\+\-\*\/]\s*[\d\.\s\+\-\*\/\(\)]+)+)', 
@@ -243,6 +245,8 @@ def api_extract():
 
 @app.route('/process', methods=['POST'])
 def process_invoice():
+    config = load_config()
+    
     if 'file' not in request.files:
         return jsonify({"error": "No hay archivo en la petición"}), 400
     
@@ -250,9 +254,11 @@ def process_invoice():
     if file.filename == '':
         return jsonify({"error": "No se seleccionó ningún archivo"}), 400
 
-    provider = (request.form.get('provider') or 'openrouter').strip().lower()
-    api_key = (request.form.get('api_key') or '').strip()
-    model = (request.form.get('model') or 'qwen/qwen-2.5-vl-7b-instruct:free').strip()
+    provider = (request.form.get('provider') or config.get('provider', 'openrouter')).strip().lower()
+    api_key = (request.form.get('api_key') or config.get('api_key', '')).strip()
+    
+    default_model = config.get('model_openrouter' if provider == 'openrouter' else 'model_ollama')
+    model = (request.form.get('model') or default_model or DEFAULT_OLLAMA_MODEL).strip()
 
     try:
         image_bytes = file.read()
@@ -261,10 +267,8 @@ def process_invoice():
         
     def generate():
         start_time = time.time()
-        
         try:
             yield f"data: {json.dumps({'phase': 'optimizing', 'message': 'Optimizando imagen...', 'elapsed': 0})}\n\n"
-            
             optimized_data = optimize_image(image_bytes)
             processed_b64 = base64.b64encode(optimized_data).decode('utf-8')
             
@@ -279,6 +283,9 @@ def process_invoice():
             token_count = 0
             
             if provider == "openrouter":
+                if not api_key:
+                    yield f"data: {json.dumps({'phase': 'error', 'message': 'API Key de OpenRouter no configurada'})}\n\n"
+                    return
                 headers = {
                     "Authorization": f"Bearer {api_key}",
                     "Content-Type": "application/json",
@@ -287,27 +294,16 @@ def process_invoice():
                 }
                 payload = {
                     "model": model,
-                    "messages": [
-                        {
-                            "role": "user",
-                            "content": [
-                                {"type": "text", "text": prompt},
-                                {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{processed_b64}"}}
-                            ]
-                        }
-                    ],
-                    "temperature": 0.1,
-                    "max_tokens": 2000,
-                    "stream": True
+                    "messages": [{"role": "user", "content": [
+                        {"type": "text", "text": prompt},
+                        {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{processed_b64}"}}
+                    ]}],
+                    "temperature": 0.1, "max_tokens": 2000, "stream": True
                 }
                 response = requests.post(OPENROUTER_API_URL, headers=headers, json=payload, stream=True, timeout=120)
-                
                 if response.status_code != 200:
-                    try:
-                        err_json = response.json()
-                        err_msg = err_json.get('error', {}).get('message', response.text)
-                    except:
-                        err_msg = response.text
+                    try: err_msg = response.json().get('error', {}).get('message', response.text)
+                    except: err_msg = response.text
                     yield f"data: {json.dumps({'phase': 'error', 'message': f'OpenRouter Error ({response.status_code}): {err_msg}'})}\n\n"
                     return
 
@@ -325,13 +321,11 @@ def process_invoice():
                                     if content:
                                         full_response += content
                                         token_count += 1
-                                        current_time = time.time()
-                                        if current_time - last_update >= 0.5:
-                                            elapsed = round(current_time - start_time, 1)
-                                            tokens_per_sec = round(token_count / elapsed, 1) if elapsed > 0 else 0
-                                            yield f"data: {json.dumps({'phase': 'generating', 'message': 'Generando respuesta...', 'tokens': token_count, 'tokens_per_sec': tokens_per_sec, 'elapsed': elapsed})}\n\n"
-                                            last_update = current_time
-                            except json.JSONDecodeError: continue
+                                        if time.time() - last_update >= 0.5:
+                                            elapsed = round(time.time() - start_time, 1)
+                                            yield f"data: {json.dumps({'phase': 'generating', 'message': 'Generando...', 'tokens': token_count, 'tokens_per_sec': round(token_count/elapsed, 1), 'elapsed': elapsed})}\n\n"
+                                            last_update = time.time()
+                            except: continue
             else:
                 payload = {
                     "model": model, "prompt": prompt, "stream": True, "images": [processed_b64], "format": "json",
@@ -339,7 +333,6 @@ def process_invoice():
                 }
                 response = requests.post(OLLAMA_API_URL, json=payload, stream=True, timeout=600)
                 response.raise_for_status()
-                
                 last_update = time.time()
                 for line in response.iter_lines():
                     if line:
@@ -348,58 +341,39 @@ def process_invoice():
                             if 'response' in chunk:
                                 full_response += chunk['response']
                                 token_count += 1
-                                current_time = time.time()
-                                if current_time - last_update >= 0.5:
-                                    elapsed = round(current_time - start_time, 1)
-                                    tokens_per_sec = round(token_count / elapsed, 1) if elapsed > 0 else 0
-                                    yield f"data: {json.dumps({'phase': 'generating', 'message': 'Generando respuesta...', 'tokens': token_count, 'tokens_per_sec': tokens_per_sec, 'elapsed': elapsed})}\n\n"
-                                    last_update = current_time
+                                if time.time() - last_update >= 0.5:
+                                    elapsed = round(time.time() - start_time, 1)
+                                    yield f"data: {json.dumps({'phase': 'generating', 'message': 'Generando...', 'tokens': token_count, 'tokens_per_sec': round(token_count/elapsed, 1), 'elapsed': elapsed})}\n\n"
+                                    last_update = time.time()
                             if chunk.get('done', False): break
-                        except json.JSONDecodeError: continue
+                        except: continue
             
-            elapsed = round(time.time() - start_time, 1)
-            # Intentar extraer JSON de la respuesta de forma robusta
-            try:
-                # 1. Buscar bloques de código markdown ```json ... ```
-                json_match = re.search(r'```json\s*({.*})\s*```', full_response, re.DOTALL)
-                if not json_match:
-                    # 2. Buscar cualquier bloque de código ``` ... ```
-                    json_match = re.search(r'```\s*({.*})?\s*```', full_response, re.DOTALL)
-                
-                clean_json = full_response
-                if json_match and json_match.group(1):
-                    clean_json = json_match.group(1)
-                else:
-                    # 3. Buscar el primer '{' y el último '}'
-                    start = full_response.find('{')
-                    end = full_response.rfind('}')
-                    if start != -1 and end != -1:
-                        clean_json = full_response[start:end+1]
-                
-                # 4. FIX: Evaluar expresiones matemáticas en valores numéricos
-                # Algunos modelos escriben "neto": 100 + 200 en lugar de "neto": 300
-                def eval_math_expr(match):
-                    expr = match.group(1)
-                    try:
-                        # Solo permitimos: números, +, -, *, /, (, ), espacios y .
-                        if re.match(r'^[\d\s\+\-\*\/\.\(\)]+$', expr):
-                            result = eval(expr, {"__builtins__": {}}, {})
-                            return str(round(result, 2))
-                    except:
-                        pass
-                    return expr
-                
-                # Buscar patrones como: 1234.00 + 5678.00 * 0.21
-                clean_json = re.sub(r':\s*([\d\.\s\+\-\*\/\(\)]+(?:\s*[\+\-\*\/]\s*[\d\.\s\+\-\*\/\(\)]+)+)', 
-                                   lambda m: ': ' + eval_math_expr(m), clean_json)
-                
-                clean_json = clean_json.strip()
-                output_data = json.loads(clean_json)
-            except json.JSONDecodeError as e:
-                output_data = {"error": f"Respuesta malformada: {str(e)}", "raw": full_response}
+            # Limpiar y evaluar math antes de enviar resultado final
+            json_match = re.search(r'```json\s*({.*})\s*```', full_response, re.DOTALL)
+            if not json_match: json_match = re.search(r'```\s*({.*})?\s*```', full_response, re.DOTALL)
+            clean_json = full_response
+            if json_match and json_match.group(1): clean_json = json_match.group(1)
+            else:
+                start = full_response.find('{')
+                end = full_response.rfind('}')
+                if start != -1 and end != -1: clean_json = full_response[start:end+1]
             
-            yield f"data: {json.dumps({'phase': 'complete', 'message': f'Completado en {elapsed}s', 'tokens': token_count, 'elapsed': elapsed, 'result': output_data, 'processed_image': processed_b64})}\n\n"
+            def eval_math_expr(match):
+                expr = match.group(1)
+                try:
+                    if re.match(r'^[\d\s\+\-\*\/\.\(\)]+$', expr):
+                        result = eval(expr, {"__builtins__": {}}, {})
+                        return str(round(result, 2))
+                except: pass
+                return expr
+                
+            clean_json = re.sub(r':\s*([\d\.\s\+\-\*\/\(\)]+(?:\s*[\+\-\*\/]\s*[\d\.\s\+\-\*\/\(\)]+)+)', 
+                               lambda m: ': ' + eval_math_expr(m), clean_json)
             
+            try: output_data = json.loads(clean_json.strip())
+            except: output_data = {"error": "Respuesta malformada", "raw": full_response}
+            
+            yield f"data: {json.dumps({'phase': 'complete', 'message': f'Completado en {round(time.time()-start_time,1)}s', 'tokens': token_count, 'elapsed': round(time.time()-start_time,1), 'result': output_data, 'processed_image': processed_b64})}\n\n"
         except Exception as e:
             yield f"data: {json.dumps({'phase': 'error', 'message': str(e)})}\n\n"
     
