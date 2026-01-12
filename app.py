@@ -180,7 +180,16 @@ def api_extract():
                 "max_tokens": 2000
             }
             response = requests.post(OPENROUTER_API_URL, headers=headers, json=payload, timeout=120)
-            response.raise_for_status()
+            
+            # Si hay error, intentamos sacar el mensaje de OpenRouter
+            if response.status_code != 200:
+                try:
+                    err_json = response.json()
+                    err_msg = err_json.get('error', {}).get('message', response.text)
+                    return jsonify({"error": f"OpenRouter Error ({response.status_code}): {err_msg}"}), response.status_code
+                except:
+                    return jsonify({"error": f"OpenRouter Error ({response.status_code}): {response.text}"}), response.status_code
+            
             result = response.json()
             if 'choices' in result and len(result['choices']) > 0:
                 full_response = result['choices'][0].get('message', {}).get('content', '')
@@ -292,8 +301,16 @@ def process_invoice():
                     "stream": True
                 }
                 response = requests.post(OPENROUTER_API_URL, headers=headers, json=payload, stream=True, timeout=120)
-                response.raise_for_status()
                 
+                if response.status_code != 200:
+                    try:
+                        err_json = response.json()
+                        err_msg = err_json.get('error', {}).get('message', response.text)
+                    except:
+                        err_msg = response.text
+                    yield f"data: {json.dumps({'phase': 'error', 'message': f'OpenRouter Error ({response.status_code}): {err_msg}'})}\n\n"
+                    return
+
                 last_update = time.time()
                 for line in response.iter_lines():
                     if line:
