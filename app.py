@@ -14,7 +14,7 @@ CORS(app)
 
 # Configuración por defecto y archivos
 CONFIG_FILE = "config.json"
-OLLAMA_API_URL = "http://localhost:11434/api/generate"
+# OLLAMA_API_URL = "http://localhost:11434/api/generate"
 OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
 DEFAULT_OLLAMA_MODEL = "ministral-facturador-full"
 
@@ -254,7 +254,8 @@ def process_invoice():
     if file.filename == '':
         return jsonify({"error": "No se seleccionó ningún archivo"}), 400
 
-    provider = (request.form.get('provider') or config.get('provider', 'openrouter')).strip().lower()
+    # provider = (request.form.get('provider') or config.get('provider', 'openrouter')).strip().lower()
+    provider = "openrouter"  # Forzado a OpenRouter para evitar timeouts locales
     api_key = (request.form.get('api_key') or config.get('api_key', '')).strip()
     
     default_model = config.get('model_openrouter' if provider == 'openrouter' else 'model_ollama')
