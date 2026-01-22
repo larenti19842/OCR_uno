@@ -33,17 +33,26 @@ OPENROUTER_MODELS = [
 ]
 
 def load_config():
-    if os.path.exists(CONFIG_FILE):
-        try:
-            with open(CONFIG_FILE, "r") as f:
-                return json.load(f)
-        except: pass
-    return {
+    # Configuración base con prioridad a la Variable de Entorno de Dokploy
+    config = {
         "provider": "openrouter",
-        "api_key": "",
+        "api_key": os.getenv("OPENROUTER_API_KEY", ""), 
         "model_openrouter": "qwen/qwen-2.5-vl-7b-instruct:free",
         "model_ollama": DEFAULT_OLLAMA_MODEL
     }
+    
+    # Intenta cargar el archivo local si existe (para otros ajustes)
+    if os.path.exists(CONFIG_FILE):
+        try:
+            with open(CONFIG_FILE, "r") as f:
+                file_data = json.load(f)
+                config.update(file_data)
+                # Si el archivo tiene una key vacía, mantenemos la del entorno
+                if not file_data.get("api_key"):
+                    config["api_key"] = os.getenv("OPENROUTER_API_KEY", "")
+        except: 
+            pass
+    return config
 
 def save_config(data):
     try:
