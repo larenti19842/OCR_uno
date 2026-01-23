@@ -33,17 +33,35 @@ OPENROUTER_MODELS = [
 ]
 
 def load_config():
+    # Prioridad: Variables de entorno (Dokploy/Docker) > config.json > defaults
+    env_config = {
+        "provider": os.environ.get("OCR_PROVIDER"),
+        "api_key": os.environ.get("OPENROUTER_API_KEY"),
+        "model_openrouter": os.environ.get("OCR_MODEL"),
+        "model_ollama": os.environ.get("OLLAMA_MODEL")
+    }
+    
+    file_config = {}
     if os.path.exists(CONFIG_FILE):
         try:
             with open(CONFIG_FILE, "r") as f:
-                return json.load(f)
+                file_config = json.load(f)
         except: pass
-    return {
+        
+    default_config = {
         "provider": "openrouter",
         "api_key": "",
         "model_openrouter": "qwen/qwen-2.5-vl-7b-instruct:free",
         "model_ollama": DEFAULT_OLLAMA_MODEL
     }
+    
+    # Merge: defaults < file < env (solo valores no-None)
+    result = {**default_config, **file_config}
+    for k, v in env_config.items():
+        if v is not None and v != "":
+            result[k] = v
+    return result
+
 
 def save_config(data):
     try:

@@ -31,3 +31,8 @@ config.json
 *.jpeg
 *.png
 !docs/*.png
+
+# Docker
+.docker/
+docker-compose.override.yml
+

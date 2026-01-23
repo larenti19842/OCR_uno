@@ -323,3 +323,23 @@ Este proyecto está bajo la Licencia MIT. Consultá el archivo `LICENSE` para m�
 **Desarrollado con ❤️ para la comunidad Argentina**
 
 </div>
+## Despliegue en Dokploy (Docker Swarm)
+
+Esta aplicación está optimizada para correr en **Dokploy** como un servicio automátizado desde GitHub.
+
+### Requisitos en Dokploy
+
+1. Crea una nueva aplicación de tipo **Docker Compose**.
+2. Conecta tu repositorio de GitHub.
+3. Configura las siguientes variables de entorno:
+   - `OPENROUTER_API_KEY`: Tu clave de API de OpenRouter.
+   - `OCR_PROVIDER`: `openrouter` (por defecto).
+   - `OCR_MODEL`: El modelo a usar (ej: `qwen/qwen-2.5-vl-7b-instruct:free`).
+
+### Configuración del Servicio
+
+El archivo `docker-compose.yml` incluido ya está configurado para:
+- Correr **2 réplicas** en Docker Swarm.
+- Servidor de producción **Gunicorn**.
+- **Healthcheck** automático.
+- Auto-reinicio en caso de fallo.
