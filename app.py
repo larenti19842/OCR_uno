@@ -351,16 +351,31 @@ def process_invoice():
                             if data_str.strip() == '[DONE]': break
                             try:
                                 chunk = json.loads(data_str)
+                                
+                                # Loguear el primer chunk para diagnóstico
+                                if not full_response:
+                                    print(f"DEBUG - First chunk received: {data_str[:200]}")
+                                
+                                # Intentar extraer contenido de diferentes estructuras posibles
+                                content = ""
                                 if 'choices' in chunk and len(chunk['choices']) > 0:
-                                    content = chunk['choices'][0].get('delta', {}).get('content', '')
-                                    if content:
-                                        full_response += content
-                                        token_count += 1
-                                        if time.time() - last_update >= 0.5:
-                                            elapsed = round(time.time() - start_time, 1)
-                                            yield f"data: {json.dumps({'phase': 'generating', 'message': 'Generando...', 'tokens': token_count, 'tokens_per_sec': round(token_count/elapsed, 1), 'elapsed': elapsed})}\n\n"
-                                            last_update = time.time()
-                            except: continue
+                                    choice = chunk['choices'][0]
+                                    if 'delta' in choice:
+                                        content = choice['delta'].get('content', '')
+                                    elif 'text' in choice: # Estructura alternativa
+                                        content = choice.get('text', '')
+                                
+                                if content:
+                                    full_response += content
+                                    token_count += 1
+                                    
+                                    if time.time() - last_update >= 0.5:
+                                        elapsed = round(time.time() - start_time, 1)
+                                        yield f"data: {json.dumps({'phase': 'generating', 'message': 'Generando...', 'tokens': token_count, 'tokens_per_sec': round(token_count/elapsed, 1), 'elapsed': elapsed})}\n\n"
+                                        last_update = time.time()
+                            except Exception as e:
+                                print(f"DEBUG - Chunk Parse Error: {e} | Line: {data_str[:100]}")
+                                continue
             else:
                 payload = {
                     "model": model, "prompt": prompt, "stream": True, "images": [processed_b64], "format": "json",
