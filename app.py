@@ -384,29 +384,48 @@ def process_invoice():
                         except: continue
             
             # Limpiar y evaluar math antes de enviar resultado final
-            json_match = re.search(r'```json\s*({.*})\s*```', full_response, re.DOTALL)
-            if not json_match: json_match = re.search(r'```\s*({.*})?\s*```', full_response, re.DOTALL)
+            # Intentar extraer bloque JSON si existe
+            json_match = re.search(r'```json\s*(\{.*?\})\s*```', full_response, re.DOTALL)
+            if not json_match: json_match = re.search(r'```\s*(\{.*?\})\s*```', full_response, re.DOTALL)
+            
             clean_json = full_response
-            if json_match and json_match.group(1): clean_json = json_match.group(1)
+            if json_match:
+                clean_json = json_match.group(1)
             else:
+                # Buscar el primer { y el último }
                 start = full_response.find('{')
                 end = full_response.rfind('}')
-                if start != -1 and end != -1: clean_json = full_response[start:end+1]
+                if start != -1 and end != -1:
+                    clean_json = full_response[start:end+1]
+            
+            # Limpiar posibles comas finales antes de cerrar llaves o corchetes
+            clean_json = re.sub(r',\s*([\}\]])', r'\1', clean_json)
             
             def eval_math_expr(match):
-                expr = match.group(1)
+                expr = match.group(1).strip()
+                # NO evaluar si parece un CUIT (ej: 20-12345678-9) o una fecha (ej: 2024-12-01)
+                if re.match(r'^\d+-\d+(-\d+)*$', expr):
+                    return f'"{expr}"' # Asegurar que es string
                 try:
-                    if re.match(r'^[\d\s\+\-\*\/\.\(\)]+$', expr):
-                        result = eval(expr, {"__builtins__": {}}, {})
-                        return str(round(result, 2))
+                    # Solo evaluar si contiene operadores matemáticos
+                    if any(op in expr for op in '+*/') or ('-' in expr and not re.match(r'^\d+-\d+', expr)):
+                        if re.match(r'^[\d\s\+\-\*\/\.\(\)]+$', expr):
+                            result = eval(expr, {"__builtins__": {}}, {})
+                            return str(round(result, 2))
                 except: pass
-                return expr
+                return '"' + expr + '"' if not expr.startswith('"') else expr
                 
+            # Procesar valores que parecen fórmulas (evitando dañar strings ya entrecomillados)
+            # Buscamos : seguido de algo que no empieza con " y tiene signos matemáticos
             clean_json = re.sub(r':\s*([\d\.\s\+\-\*\/\(\)]+(?:\s*[\+\-\*\/]\s*[\d\.\s\+\-\*\/\(\)]+)+)', 
                                lambda m: ': ' + eval_math_expr(m), clean_json)
             
-            try: output_data = json.loads(clean_json.strip())
-            except: output_data = {"error": "Respuesta malformada", "raw": full_response}
+            try: 
+                output_data = json.loads(clean_json.strip())
+            except Exception as e:
+                print(f"JSON Parse Error: {e}")
+                print(f"Clean JSON attempted: {clean_json}")
+                output_data = {"error": "Respuesta malformada", "raw": full_response, "clean_attempt": clean_json}
             
             yield f"data: {json.dumps({'phase': 'complete', 'message': f'Completado en {round(time.time()-start_time,1)}s', 'tokens': token_count, 'elapsed': round(time.time()-start_time,1), 'result': output_data, 'processed_image': processed_b64})}\n\n"
         except Exception as e:
