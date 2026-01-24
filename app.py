@@ -29,14 +29,15 @@ OPENROUTER_MODELS = [
 ]
 
 # Configuración de reintentos y fallbacks
-MAX_RETRIES = 2
-FALLBACK_DELAY = 3 # Segundos entre reintentos
+MAX_RETRIES = 1
+FALLBACK_DELAY = 1 # Segundos entre reintentos
 PRIMARY_FALLBACKS = [
-    "qwen/qwen-2.5-vl-7b-instruct:free",
     "google/gemini-2.0-flash-exp:free",
+    "qwen/qwen-2.5-vl-7b-instruct:free",
     "google/gemini-2.0-flash-001",
     "openai/gpt-4o-mini"
 ]
+TIMEOUT_OPENROUTER = 25 # Reducido para reaccionar más rápido
 
 def load_config():
     # Prioridad: Variables de entorno (Dokploy/Docker) > config.json > defaults
@@ -238,17 +239,20 @@ def api_extract():
                 for attempt in range(MAX_RETRIES + 1):
                     try:
                         payload["model"] = current_model
-                        response = requests.post(OPENROUTER_API_URL, headers=headers, json=payload, timeout=60)
+                        print(f"DEBUG: Attempt {attempt} for {current_model} (Timeout: {TIMEOUT_OPENROUTER}s)")
+                        response = requests.post(OPENROUTER_API_URL, headers=headers, json=payload, timeout=TIMEOUT_OPENROUTER)
                         
                         if response.status_code == 200:
                             result = response.json()
                             if 'choices' in result and len(result['choices']) > 0:
                                 full_response = result['choices'][0].get('message', {}).get('content', '')
                                 if full_response:
+                                    print(f"DEBUG: Success with {current_model}")
                                     break # Exito!
                         
                         # Si llegamos aquí es un error o respuesta vacía
                         status = response.status_code
+                        print(f"DEBUG: Status {status} received")
                         try: err_detail = response.json().get('error', {}).get('message', response.text)
                         except: err_detail = response.text
                         last_error = f"Error {status} con {current_model}: {err_detail}"
@@ -270,6 +274,7 @@ def api_extract():
                     break
             
             if not full_response:
+                print(f"FATAL: All attempts failed. Last error: {last_error}")
                 return jsonify({"error": f"No se pudo obtener respuesta tras varios intentos: {last_error}"}), 502
         else:
             payload = {
@@ -379,16 +384,19 @@ def process_invoice():
                     payload["model"] = current_model
                     for attempt in range(MAX_RETRIES + 1):
                         attempt_msg = f" (reintento {attempt})" if attempt > 0 else ""
+                        print(f"DEBUG: Streaming attempt {attempt} for {current_model}")
                         yield f"data: {json.dumps({'phase': 'sending', 'message': f'Usando {current_model}{attempt_msg}...', 'elapsed': round(time.time() - start_time, 1)})}\n\n"
                         
                         try:
-                            response = requests.post(OPENROUTER_API_URL, headers=headers, json=payload, stream=True, timeout=60)
+                            response = requests.post(OPENROUTER_API_URL, headers=headers, json=payload, stream=True, timeout=TIMEOUT_OPENROUTER)
+                            print(f"DEBUG: Stream status for {current_model}: {response.status_code}")
                             
                             if response.status_code == 200:
                                 line_count = 0
                                 last_update = time.time()
                                 chunk_received = False
-
+                                
+                                # Iteramos con timeout por línea
                                 for line in response.iter_lines():
                                     if line:
                                         line_str = line.decode('utf-8')
@@ -415,12 +423,16 @@ def process_invoice():
                                 
                                 if full_response and chunk_received:
                                     success = True
+                                    print(f"DEBUG: Stream success with {current_model} after {token_count} tokens")
                                     break
+                                else:
+                                    print(f"DEBUG: Stream finished but no content for {current_model}")
                             
                             # Si no hubo éxito, manejar error de stream
                             status = response.status_code
                             print(f"Stream attempt {attempt+1} failed for {current_model}: Status {status}")
-                            if not success and status in [429, 524, 502, 503, 504]:
+                            if not success and (status in [429, 524, 502, 503, 504] or status == 200):
+                                yield f"data: {json.dumps({'phase': 'sending', 'message': f'Reintentando {current_model} (err {status})...', 'elapsed': round(time.time() - start_time, 1)})}\n\n"
                                 time.sleep(FALLBACK_DELAY)
                                 continue
                             else:
@@ -428,11 +440,13 @@ def process_invoice():
                                 
                         except Exception as e:
                             print(f"Stream exception on attempt {attempt+1} for {current_model}: {e}")
-                            time.sleep(FALLBACK_DELAY)
+                            yield f"data: {json.dumps({'phase': 'sending', 'message': f'Error de conexión, probando otro modelo...', 'elapsed': round(time.time() - start_time, 1)})}\n\n"
+                            time.sleep(1)
                     
                     if success: break
                 
                 if not success:
+                    print(f"FATAL: All streaming models failed.")
                     yield f"data: {json.dumps({'phase': 'error', 'message': 'OpenRouter no responde tras varios fallbacks'})}\n\n"
                     return
             else:
