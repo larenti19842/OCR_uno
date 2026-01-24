@@ -412,7 +412,11 @@ def process_invoice():
         except Exception as e:
             yield f"data: {json.dumps({'phase': 'error', 'message': str(e)})}\n\n"
     
-    return Response(stream_with_context(generate()), mimetype='text/event-stream')
+    response = Response(stream_with_context(generate()), mimetype='text/event-stream')
+    response.headers['Cache-Control'] = 'no-cache'
+    response.headers['X-Accel-Buffering'] = 'no'
+    response.headers['Connection'] = 'keep-alive'
+    return response
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)

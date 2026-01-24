@@ -1175,9 +1175,14 @@
 
                 while (true) {
                     const { done, value } = await reader.read();
-                    if (done) break;
+                    if (done) {
+                        console.log("Stream reader done");
+                        break;
+                    }
 
-                    buffer += decoder.decode(value, { stream: true });
+                    const decoded = decoder.decode(value, { stream: true });
+                    console.log(`Received chunk: ${decoded.length} bytes`);
+                    buffer += decoded;
                     const lines = buffer.split('\n');
                     buffer = lines.pop();
 
