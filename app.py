@@ -29,15 +29,15 @@ OPENROUTER_MODELS = [
 ]
 
 # Configuración de reintentos y fallbacks
-MAX_RETRIES = 0 # Sin reintentos en el mismo modelo para ir rápido al siguiente
+MAX_RETRIES = 0
 FALLBACK_DELAY = 1 
 PRIMARY_FALLBACKS = [
-    "mistralai/mistral-3b", # Muy estable para visión
+    "mistralai/mistral-3b", 
     "openai/gpt-4o-mini",
     "qwen/qwen-2.5-vl-7b-instruct:free",
     "google/gemini-2.0-flash-exp:free"
 ]
-TIMEOUT_OPENROUTER = 15 # Muy corto para detectar cuellos de botella rápido
+TIMEOUT_OPENROUTER = 20 # Reducido para evitar timeouts de gateway/proxy
 
 def load_config():
     # Prioridad: Variables de entorno (Dokploy/Docker) > config.json > defaults
@@ -348,70 +348,66 @@ def process_invoice():
                 
                 for current_model in models_to_try:
                     payload["model"] = current_model
-                    # Intentar NO-STREAM primero para más estabilidad si hay problemas de quota
+                    # HEARTBEAT: Avisar al navegador ANTES de cada intento largo
+                    yield f"data: {json.dumps({'phase': 'sending', 'message': f'Probando {current_model}...', 'elapsed': round(time.time() - start_time, 1)})}\n\n"
+                    
                     for attempt in range(MAX_RETRIES + 1):
-                        use_stream = (attempt > 0) # Segundo intento usa stream para feedback
+                        use_stream = True # Preferir siempre stream para feedback visual constante
                         payload["stream"] = use_stream
                         
                         try:
-                            print(f"DEBUG: Request to {current_model} (Stream={use_stream}, Attempt={attempt})")
+                            print(f"DEBUG: Request to {current_model} (Attempt={attempt})")
                             response = requests.post(OPENROUTER_API_URL, headers=headers, json=payload, stream=use_stream, timeout=TIMEOUT_OPENROUTER)
                             
                             if response.status_code == 200:
-                                if not use_stream:
-                                    # Caso NO-STREAM
-                                    result = response.json()
-                                    content = result['choices'][0].get('message', {}).get('content', '') if 'choices' in result else ""
-                                    if content and "model output must contain" not in content.lower():
-                                        full_response = content
-                                        success = True
-                                        break
-                                    else:
-                                        print(f"DEBUG: Empty or invalid content from no-stream {current_model}")
-                                else:
-                                    # Caso STREAM
-                                    line_count = 0
-                                    chunk_received = False
-                                    for line in response.iter_lines():
-                                        if line:
-                                            line_str = line.decode('utf-8', errors='ignore')
-                                            if "model output must contain" in line_str.lower():
-                                                break
-                                            if line_str.startswith('data: '):
-                                                data_str = line_str[6:]
-                                                if data_str.strip() == '[DONE]': break
-                                                try:
-                                                    chunk = json.loads(data_str)
-                                                    if 'error' in chunk: break
-                                                    delta = chunk['choices'][0].get('delta', {}) if 'choices' in chunk else {}
-                                                    part = delta.get('content', '') or chunk['choices'][0].get('text', '') if 'choices' in chunk else ''
-                                                    if part:
-                                                        full_response += part
-                                                        token_count += 1
-                                                        chunk_received = True
-                                                        if time.time() - last_update >= 0.5:
-                                                            yield f"data: {json.dumps({'phase': 'generating', 'message': f'Extrayendo ({current_model})...', 'tokens': token_count})}\n\n"
-                                                            last_update = time.time()
-                                                except: continue
-                                    
-                                    if full_response and chunk_received and "model output must contain" not in full_response.lower():
-                                        success = True
-                                        break
-
-                            # Gestión de errores
+                                chunk_received = False
+                                for line in response.iter_lines():
+                                    if line:
+                                        line_str = line.decode('utf-8', errors='ignore')
+                                        if "model output must contain" in line_str.lower():
+                                            print(f"DEBUG: Caught specific Gemini error in line content")
+                                            break
+                                            
+                                        if line_str.startswith('data: '):
+                                            data_str = line_str[6:]
+                                            if data_str.strip() == '[DONE]': break
+                                            try:
+                                                chunk = json.loads(data_str)
+                                                if 'error' in chunk:
+                                                    print(f"DEBUG Error in stream JSON: {chunk['error']}")
+                                                    break
+                                                
+                                                delta = chunk['choices'][0].get('delta', {}) if 'choices' in chunk else {}
+                                                part = delta.get('content', '') or chunk['choices'][0].get('text', '') if 'choices' in chunk else ''
+                                                
+                                                if part:
+                                                    full_response += part
+                                                    token_count += 1
+                                                    chunk_received = True
+                                                    if time.time() - last_update >= 0.3: # Más frecuente para fluidez
+                                                        yield f"data: {json.dumps({'phase': 'generating', 'message': f'Extrayendo con {current_model}...', 'tokens': token_count, 'elapsed': round(time.time() - start_time, 1)})}\n\n"
+                                                        last_update = time.time()
+                                            except: continue
+                                
+                                if full_response.strip() and chunk_received:
+                                    success = True
+                                    print(f"DEBUG: Success with {current_model}")
+                                    break
+                            
+                            # Gestión de errores HTTP
                             status = response.status_code
-                            if status == 401:
-                                yield f"data: {json.dumps({'phase': 'error', 'message': 'API KEY INVÁLIDA (401)'})}\n\n"
-                                return
-                            if status == 402:
-                                yield f"data: {json.dumps({'phase': 'error', 'message': 'SALDO INSUFICIENTE (402). Recarga en openrouter.ai/settings/credits'})}\n\n"
+                            if status == 401 or status == 402:
+                                msg = "API KEY INVÁLIDA (401)" if status == 401 else "SIN SALDO (402)"
+                                yield f"data: {json.dumps({'phase': 'error', 'message': f'{msg}: Revisa tu cuenta de OpenRouter.'})}\n\n"
                                 return
                             
-                            print(f"DEBUG: Failed {current_model} with status {status}. Falling back...")
-                            time.sleep(FALLBACK_DELAY)
+                            print(f"DEBUG: {current_model} failed with status {status}")
+                            yield f"data: {json.dumps({'phase': 'sending', 'message': f'Fallo en {current_model}, saltando...', 'elapsed': round(time.time() - start_time, 1)})}\n\n"
+                            break # Siguiente modelo
+                            
                         except Exception as e:
                             print(f"DEBUG: Exception with {current_model}: {e}")
-                            time.sleep(FALLBACK_DELAY)
+                            break # Siguiente modelo
                     
                     if success: break
                 
