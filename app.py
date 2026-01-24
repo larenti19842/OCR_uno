@@ -168,6 +168,14 @@ def manage_config():
     else:
         return jsonify(load_config())
 
+@app.route('/api/health/ollama')
+def check_ollama():
+    try:
+        response = requests.get("http://localhost:11434/api/tags", timeout=2)
+        return jsonify({"connected": response.status_code == 200})
+    except:
+        return jsonify({"connected": false})
+
 @app.route('/api/extract', methods=['POST'])
 def api_extract():
     config = load_config()
@@ -213,7 +221,7 @@ def api_extract():
                 "temperature": 0.1,
                 "max_tokens": 2000
             }
-            response = requests.post(OPENROUTER_API_URL, headers=headers, json=payload, timeout=120)
+            response = requests.post(OPENROUTER_API_URL, headers=headers, json=payload, timeout=300)
             if response.status_code != 200:
                 try: err_msg = response.json().get('error', {}).get('message', response.text)
                 except: err_msg = response.text
@@ -322,7 +330,7 @@ def process_invoice():
                     ]}],
                     "temperature": 0.1, "max_tokens": 2000, "stream": True
                 }
-                response = requests.post(OPENROUTER_API_URL, headers=headers, json=payload, stream=True, timeout=120)
+                response = requests.post(OPENROUTER_API_URL, headers=headers, json=payload, stream=True, timeout=300)
                 if response.status_code != 200:
                     try: err_msg = response.json().get('error', {}).get('message', response.text)
                     except: err_msg = response.text

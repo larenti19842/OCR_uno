@@ -1067,10 +1067,15 @@
             const statusText = document.getElementById('ollamaStatusText');
 
             try {
-                const response = await fetch('http://localhost:11434/api/tags', { method: 'GET' });
+                const response = await fetch('/api/health/ollama');
                 if (response.ok) {
-                    statusDot.classList.add('connected');
-                    statusText.textContent = 'Ollama conectado';
+                    const data = await response.json();
+                    if (data.connected) {
+                        statusDot.classList.add('connected');
+                        statusText.textContent = 'Ollama conectado';
+                    } else {
+                        throw new Error('Not connected');
+                    }
                 } else {
                     throw new Error('Not connected');
                 }
