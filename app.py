@@ -21,15 +21,21 @@ DEFAULT_OLLAMA_MODEL = "ministral-facturador-full"
 # Modelos populares de OpenRouter para visión
 OPENROUTER_MODELS = [
     {"id": "qwen/qwen-2.5-vl-7b-instruct:free", "name": "Qwen 2.5 VL 7B (Free)"},
-    {"id": "mistralai/ministral-3b", "name": "Ministral 3B"},
+    {"id": "google/gemini-2.0-flash-exp:free", "name": "Gemini 2.0 Flash Exp (Free)"},
+    {"id": "mistralai/mistral-3b", "name": "Ministral 3B"},
     {"id": "google/gemini-2.0-flash-001", "name": "Gemini 2.0 Flash"},
-    {"id": "google/gemini-pro-vision", "name": "Gemini Pro Vision"},
     {"id": "anthropic/claude-3.5-sonnet", "name": "Claude 3.5 Sonnet"},
-    {"id": "anthropic/claude-3-haiku", "name": "Claude 3 Haiku"},
-    {"id": "openai/gpt-4o", "name": "GPT-4o"},
     {"id": "openai/gpt-4o-mini", "name": "GPT-4o Mini"},
-    {"id": "meta-llama/llama-3.2-90b-vision-instruct", "name": "Llama 3.2 90B Vision"},
-    {"id": "qwen/qwen2.5-vl-72b-instruct", "name": "Qwen 2.5 VL 72B"},
+]
+
+# Configuración de reintentos y fallbacks
+MAX_RETRIES = 2
+FALLBACK_DELAY = 3 # Segundos entre reintentos
+PRIMARY_FALLBACKS = [
+    "qwen/qwen-2.5-vl-7b-instruct:free",
+    "google/gemini-2.0-flash-exp:free",
+    "google/gemini-2.0-flash-001",
+    "openai/gpt-4o-mini"
 ]
 
 def load_config():
@@ -223,16 +229,48 @@ def api_extract():
                 "max_tokens": 2000
             }
             print(f"Sending to OpenRouter: {model}")
-            response = requests.post(OPENROUTER_API_URL, headers=headers, json=payload, timeout=300)
-            print(f"OpenRouter Response Status: {response.status_code}")
-            if response.status_code != 200:
-                try: err_msg = response.json().get('error', {}).get('message', response.text)
-                except: err_msg = response.text
-                return jsonify({"error": f"OpenRouter Error ({response.status_code}): {err_msg}"}), response.status_code
             
-            result = response.json()
-            if 'choices' in result and len(result['choices']) > 0:
-                full_response = result['choices'][0].get('message', {}).get('content', '')
+            # Lógica de reintentos y fallback para OpenRouter
+            models_to_try = [model] + [m for m in PRIMARY_FALLBACKS if m != model]
+            last_error = ""
+            
+            for current_model in models_to_try:
+                for attempt in range(MAX_RETRIES + 1):
+                    try:
+                        payload["model"] = current_model
+                        response = requests.post(OPENROUTER_API_URL, headers=headers, json=payload, timeout=60)
+                        
+                        if response.status_code == 200:
+                            result = response.json()
+                            if 'choices' in result and len(result['choices']) > 0:
+                                full_response = result['choices'][0].get('message', {}).get('content', '')
+                                if full_response:
+                                    break # Exito!
+                        
+                        # Si llegamos aquí es un error o respuesta vacía
+                        status = response.status_code
+                        try: err_detail = response.json().get('error', {}).get('message', response.text)
+                        except: err_detail = response.text
+                        last_error = f"Error {status} con {current_model}: {err_detail}"
+                        print(f"Attempt {attempt+1} failed for {current_model}: {last_error}")
+                        
+                        if status in [429, 524, 502, 503, 504]:
+                            time.sleep(FALLBACK_DELAY * (attempt + 1))
+                            continue
+                        else:
+                            break # No reintentar errores fatales de API
+                            
+                    except Exception as e:
+                        last_error = str(e)
+                        print(f"Exception on attempt {attempt+1} for {current_model}: {e}")
+                        time.sleep(FALLBACK_DELAY)
+                
+                if full_response:
+                    model = current_model # Actualizar modelo para el log
+                    break
+            
+            if not full_response:
+                return jsonify({"error": f"No se pudo obtener respuesta tras varios intentos: {last_error}"}), 502
         else:
             payload = {
                 "model": model, "prompt": prompt, "stream": False, "images": [processed_b64], "format": "json",
@@ -333,66 +371,70 @@ def process_invoice():
                     ]}],
                     "temperature": 0.1, "max_tokens": 2000, "stream": True
                 }
-                print(f"Streaming from OpenRouter: {model}")
-                response = requests.post(OPENROUTER_API_URL, headers=headers, json=payload, stream=True, timeout=300)
-                print(f"OpenRouter Stream Status: {response.status_code}")
-                if response.status_code != 200:
-                    try: err_msg = response.json().get('error', {}).get('message', response.text)
-                    except: err_msg = response.text
-                    yield f"data: {json.dumps({'phase': 'error', 'message': f'OpenRouter Error ({response.status_code}): {err_msg}'})}\n\n"
-                    return
-
-                line_count = 0
-                last_update = time.time()
+                # Lógica de reintentos y fallback para OpenRouter con STREAMING
+                models_to_try = [model] + [m for m in PRIMARY_FALLBACKS if m != model]
+                success = False
                 
-                # Log de control
-                print(f"DEBUG - Connection established. Status: {response.status_code}")
-                print(f"DEBUG - Headers: {dict(response.headers)}")
-
-                for line in response.iter_lines():
-                    if line:
-                        line_count += 1
-                        line_str = line.decode('utf-8')
+                for current_model in models_to_try:
+                    payload["model"] = current_model
+                    for attempt in range(MAX_RETRIES + 1):
+                        attempt_msg = f" (reintento {attempt})" if attempt > 0 else ""
+                        yield f"data: {json.dumps({'phase': 'sending', 'message': f'Usando {current_model}{attempt_msg}...', 'elapsed': round(time.time() - start_time, 1)})}\n\n"
                         
-                        if line_count <= 3:
-                            print(f"DEBUG - Raw line {line_count}: {line_str[:100]}")
+                        try:
+                            response = requests.post(OPENROUTER_API_URL, headers=headers, json=payload, stream=True, timeout=60)
                             
-                        if line_str.startswith('data: '):
-                            data_str = line_str[6:]
-                            if data_str.strip() == '[DONE]': break
-                            try:
-                                chunk = json.loads(data_str)
-                                content = ""
-                                if 'choices' in chunk and len(chunk['choices']) > 0:
-                                    choice = chunk['choices'][0]
-                                    if 'delta' in choice:
-                                        content = choice['delta'].get('content', '')
-                                    elif 'text' in choice:
-                                        content = choice.get('text', '')
+                            if response.status_code == 200:
+                                line_count = 0
+                                last_update = time.time()
+                                chunk_received = False
+
+                                for line in response.iter_lines():
+                                    if line:
+                                        line_str = line.decode('utf-8')
+                                        if line_str.startswith('data: '):
+                                            data_str = line_str[6:]
+                                            if data_str.strip() == '[DONE]': break
+                                            try:
+                                                chunk = json.loads(data_str)
+                                                content = ""
+                                                if 'choices' in chunk and len(chunk['choices']) > 0:
+                                                    choice = chunk['choices'][0]
+                                                    if 'delta' in choice: content = choice['delta'].get('content', '')
+                                                    elif 'text' in choice: content = choice.get('text', '')
+                                                
+                                                if content:
+                                                    full_response += content
+                                                    token_count += 1
+                                                    chunk_received = True
+                                                    if time.time() - last_update >= 0.5:
+                                                        elapsed = round(time.time() - start_time, 1)
+                                                        yield f"data: {json.dumps({'phase': 'generating', 'message': f'Generando con {current_model}...', 'tokens': token_count, 'elapsed': elapsed})}\n\n"
+                                                        last_update = time.time()
+                                            except: continue
                                 
-                                if content:
-                                    full_response += content
-                                    token_count += 1
-                                    if time.time() - last_update >= 0.5:
-                                        elapsed = round(time.time() - start_time, 1)
-                                        yield f"data: {json.dumps({'phase': 'generating', 'message': 'Generando...', 'tokens': token_count, 'tokens_per_sec': round(token_count/elapsed, 1), 'elapsed': elapsed})}\n\n"
-                                        last_update = time.time()
-                            except Exception as e:
+                                if full_response and chunk_received:
+                                    success = True
+                                    break
+                            
+                            # Si no hubo éxito, manejar error de stream
+                            status = response.status_code
+                            print(f"Stream attempt {attempt+1} failed for {current_model}: Status {status}")
+                            if not success and status in [429, 524, 502, 503, 504]:
+                                time.sleep(FALLBACK_DELAY)
                                 continue
+                            else:
+                                break # Fallback al siguiente modelo
+                                
+                        except Exception as e:
+                            print(f"Stream exception on attempt {attempt+1} for {current_model}: {e}")
+                            time.sleep(FALLBACK_DELAY)
+                    
+                    if success: break
                 
-                # FALLBACK: Si el stream terminó pero no capturamos nada, intentar leer como texto plano
-                if not full_response:
-                    print(f"DEBUG - Stream empty. Attempting fallback read...")
-                    try:
-                        # Si es un error de OpenRouter que no vino por SSE
-                        fallback_data = response.text
-                        print(f"DEBUG - Fallback data length: {len(fallback_data)}")
-                        if fallback_data and not fallback_data.startswith('data: '):
-                            full_response = fallback_data
-                    except:
-                        pass
-                
-                print(f"DEBUG - Stream finished. Total lines: {line_count} | Total content length: {len(full_response)}")
+                if not success:
+                    yield f"data: {json.dumps({'phase': 'error', 'message': 'OpenRouter no responde tras varios fallbacks'})}\n\n"
+                    return
             else:
                 payload = {
                     "model": model, "prompt": prompt, "stream": True, "images": [processed_b64], "format": "json",
