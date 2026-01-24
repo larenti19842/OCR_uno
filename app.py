@@ -173,8 +173,9 @@ def check_ollama():
     try:
         response = requests.get("http://localhost:11434/api/tags", timeout=2)
         return jsonify({"connected": response.status_code == 200})
-    except:
-        return jsonify({"connected": false})
+    except Exception as e:
+        print(f"Ollama connection error: {e}")
+        return jsonify({"connected": False})
 
 @app.route('/api/extract', methods=['POST'])
 def api_extract():
@@ -221,7 +222,9 @@ def api_extract():
                 "temperature": 0.1,
                 "max_tokens": 2000
             }
+            print(f"Sending to OpenRouter: {model}")
             response = requests.post(OPENROUTER_API_URL, headers=headers, json=payload, timeout=300)
+            print(f"OpenRouter Response Status: {response.status_code}")
             if response.status_code != 200:
                 try: err_msg = response.json().get('error', {}).get('message', response.text)
                 except: err_msg = response.text
@@ -330,7 +333,9 @@ def process_invoice():
                     ]}],
                     "temperature": 0.1, "max_tokens": 2000, "stream": True
                 }
+                print(f"Streaming from OpenRouter: {model}")
                 response = requests.post(OPENROUTER_API_URL, headers=headers, json=payload, stream=True, timeout=300)
+                print(f"OpenRouter Stream Status: {response.status_code}")
                 if response.status_code != 200:
                     try: err_msg = response.json().get('error', {}).get('message', response.text)
                     except: err_msg = response.text
