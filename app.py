@@ -342,27 +342,29 @@ def process_invoice():
                     yield f"data: {json.dumps({'phase': 'error', 'message': f'OpenRouter Error ({response.status_code}): {err_msg}'})}\n\n"
                     return
 
+                line_count = 0
                 last_update = time.time()
                 for line in response.iter_lines():
                     if line:
+                        line_count += 1
                         line_str = line.decode('utf-8')
+                        
+                        # Log ultra-verbose el inicio del stream
+                        if line_count <= 5:
+                            print(f"DEBUG - Raw line {line_count}: {line_str[:150]}")
+                            
                         if line_str.startswith('data: '):
                             data_str = line_str[6:]
                             if data_str.strip() == '[DONE]': break
                             try:
                                 chunk = json.loads(data_str)
                                 
-                                # Loguear el primer chunk para diagnóstico
-                                if not full_response:
-                                    print(f"DEBUG - First chunk received: {data_str[:200]}")
-                                
-                                # Intentar extraer contenido de diferentes estructuras posibles
                                 content = ""
                                 if 'choices' in chunk and len(chunk['choices']) > 0:
                                     choice = chunk['choices'][0]
                                     if 'delta' in choice:
                                         content = choice['delta'].get('content', '')
-                                    elif 'text' in choice: # Estructura alternativa
+                                    elif 'text' in choice:
                                         content = choice.get('text', '')
                                 
                                 if content:
@@ -374,8 +376,12 @@ def process_invoice():
                                         yield f"data: {json.dumps({'phase': 'generating', 'message': 'Generando...', 'tokens': token_count, 'tokens_per_sec': round(token_count/elapsed, 1), 'elapsed': elapsed})}\n\n"
                                         last_update = time.time()
                             except Exception as e:
-                                print(f"DEBUG - Chunk Parse Error: {e} | Line: {data_str[:100]}")
+                                if line_count <= 10:
+                                    print(f"DEBUG - Parse Error: {e} | Line: {line_str[:100]}")
                                 continue
+                
+                if not full_response:
+                    print(f"DEBUG - Stream finished but full_response is EMPTY. Total lines: {line_count}")
             else:
                 payload = {
                     "model": model, "prompt": prompt, "stream": True, "images": [processed_b64], "format": "json",
