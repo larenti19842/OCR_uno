@@ -12,11 +12,16 @@ services:
       - OCR_MODEL=${OCR_MODEL:-qwen/qwen-2.5-vl-7b-instruct:free}
     labels:
       - "traefik.enable=true"
-      # Aumentar el timeout de respuesta del servidor (clave para OCR largo)
-      - "traefik.http.services.ocr-app-service.loadbalancer.server.timeout=600s"
-      # Asegurar que Traefik no corte la conexión de streaming
-      - "traefik.http.middlewares.ocr-timeout.forwardingtimeout=600s"
-      - "traefik.http.routers.ocr-app-router.middlewares=ocr-timeout"
+      # Usar el nombre del servicio definido arriba para que los labels enganchen
+      - "traefik.http.routers.ocr-app.rule=Host(`larentiapi.duckdns.org`)"
+      - "traefik.http.routers.ocr-app.entrypoints=websecure"
+      - "traefik.http.routers.ocr-app.tls=true"
+      - "traefik.http.routers.ocr-app.tls.certresolver=letsencrypt"
+      # Aumentar timeouts del Load Balancer
+      - "traefik.http.services.ocr-app.loadbalancer.server.timeout=600s"
+      # Desbloquear buffering para que los heartbeats lleguen al instante
+      - "traefik.http.middlewares.ocr-buffering.buffering.retryExpression=IsNetworkError() && ResponseCode() == 502"
+      - "traefik.http.routers.ocr-app.middlewares=ocr-buffering"
     deploy:
       replicas: 2
       restart_policy:
