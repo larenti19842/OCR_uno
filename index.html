@@ -669,6 +669,20 @@
                         💡 Obtén tu API key en <a href="https://openrouter.ai/keys" target="_blank"
                             style="color: var(--accent);">openrouter.ai/keys</a>
                     </p>
+                    <div class="status-indicator">
+                        <span class="status-dot" id="openRouterStatus"></span>
+                        <span id="openRouterStatusText">Sin verificar</span>
+                        <button type="button" class="secondary"
+                            style="padding: 0.2rem 0.6rem; font-size: 0.7rem; margin-left: auto;"
+                            onclick="testOpenRouterConnection()">Test API Key</button>
+                    </div>
+                    <!-- Alerta de Saldo -->
+                    <div id="creditAlert"
+                        style="display: none; background: rgba(239, 68, 68, 0.2); border: 1px solid #ef4444; color: #f87171; padding: 0.75rem; border-radius: 0.5rem; margin-top: 1rem; font-size: 0.85rem;">
+                        ⚠️ <strong>Saldo insuficiente o Key inválida:</strong> OpenRouter requiere al menos $5 de saldo
+                        para usar visión. Recarga en <a href="https://openrouter.ai/settings/credits" target="_blank"
+                            style="color: white; text-decoration: underline;">settings/credits</a>.
+                    </div>
                 </div>
             </div>
         </div>
@@ -980,33 +994,32 @@
         }
 
         async function loadSettings() {
-            // 1. Intentar cargar desde el servidor (Sincronización con Postman)
+            let serverConfig = {};
             try {
                 const response = await fetch('/api/config');
-                if (response.ok) {
-                    const config = await response.json();
-                    if (config.provider) {
-                        currentProvider = config.provider;
-                        setProvider(currentProvider);
-                    }
-                    if (config.api_key) document.getElementById('openrouterApiKey').value = config.api_key;
-                    if (config.model_openrouter) document.getElementById('openrouterModel').value = config.model_openrouter;
-                    if (config.model_ollama) document.getElementById('ollamaModel').value = config.model_ollama;
-                    return; // Ya cargamos todo desde el servidor
-                }
+                if (response.ok) serverConfig = await response.json();
             } catch (e) {
-                console.warn('No se pudo cargar config del servidor, usando local', e);
+                console.warn("No se pudo cargar config del servidor");
             }
 
-            // 2. Fallback: LocalStorage
-            const apiKey = localStorage.getItem('openrouter_api_key') || '';
-            const model = localStorage.getItem('openrouter_model') || 'qwen/qwen-2.5-vl-7b-instruct:free';
-            const ollamaModel = localStorage.getItem('ollama_model') || 'ministral-facturador-full';
+            const apiKey = serverConfig.api_key || localStorage.getItem('openrouter_api_key') || '';
+            const model = serverConfig.model_openrouter || localStorage.getItem('openrouter_model') || 'qwen/qwen-2.5-vl-7b-instruct:free';
+            const ollamaModel = serverConfig.model_ollama || localStorage.getItem('ollama_model') || 'ministral-facturador-full';
+            const provider = serverConfig.provider || localStorage.getItem('ocr_provider') || 'openrouter';
 
             document.getElementById('openrouterApiKey').value = apiKey;
             document.getElementById('openrouterModel').value = model;
             document.getElementById('ollamaModel').value = ollamaModel;
-            setProvider(localStorage.getItem('ocr_provider') || 'openrouter');
+
+            // Set current provider without triggering a save to avoid loop
+            currentProvider = provider;
+            document.getElementById('btnOllama').classList.toggle('active', provider === 'ollama');
+            document.getElementById('btnOpenRouter').classList.toggle('active', provider === 'openrouter');
+            document.getElementById('ollamaSettings').classList.toggle('hidden', provider !== 'ollama');
+            document.getElementById('openrouterSettings').classList.toggle('visible', provider === 'openrouter');
+
+            checkOllamaConnection();
+            if (apiKey) testOpenRouterConnection();
         }
 
         function saveSettingsToLocal() {
@@ -1018,8 +1031,6 @@
 
         async function saveSettings() {
             saveSettingsToLocal();
-
-            // Sincronizar con el servidor
             const config = {
                 provider: currentProvider,
                 api_key: document.getElementById('openrouterApiKey').value.trim(),
@@ -1044,16 +1055,12 @@
 
         function setProvider(provider) {
             currentProvider = provider;
-
             document.getElementById('btnOllama').classList.toggle('active', provider === 'ollama');
             document.getElementById('btnOpenRouter').classList.toggle('active', provider === 'openrouter');
-
             document.getElementById('ollamaSettings').classList.toggle('hidden', provider !== 'ollama');
             document.getElementById('openrouterSettings').classList.toggle('visible', provider === 'openrouter');
-
             document.getElementById('phaseSendText').textContent =
                 provider === 'openrouter' ? 'Enviando a OpenRouter' : 'Enviando a Ollama';
-
             saveSettings();
         }
 
@@ -1065,7 +1072,6 @@
         async function checkOllamaConnection() {
             const statusDot = document.getElementById('ollamaStatus');
             const statusText = document.getElementById('ollamaStatusText');
-
             try {
                 const response = await fetch('/api/health/ollama');
                 if (response.ok) {
@@ -1074,14 +1080,48 @@
                         statusDot.classList.add('connected');
                         statusText.textContent = 'Ollama conectado';
                     } else {
-                        throw new Error('Not connected');
+                        statusDot.classList.remove('connected');
+                        statusText.textContent = 'Ollama no disponible';
                     }
-                } else {
-                    throw new Error('Not connected');
                 }
             } catch (e) {
                 statusDot.classList.remove('connected');
                 statusText.textContent = 'Ollama no disponible';
+            }
+        }
+
+        async function testOpenRouterConnection() {
+            const apiKey = document.getElementById('openrouterApiKey').value.trim();
+            const statusDot = document.getElementById('openRouterStatus');
+            const statusText = document.getElementById('openRouterStatusText');
+
+            if (!apiKey) {
+                statusText.textContent = 'Falta API Key';
+                statusDot.classList.remove('connected');
+                return;
+            }
+
+            statusText.textContent = 'Verificando...';
+            try {
+                const response = await fetch('https://openrouter.ai/api/v1/auth/key', {
+                    headers: { 'Authorization': `Bearer ${apiKey}` }
+                });
+
+                if (response.ok) {
+                    statusDot.classList.add('connected');
+                    statusText.textContent = 'Key Válida';
+                    document.getElementById('creditAlert').style.display = 'none';
+                } else {
+                    const errData = await response.json();
+                    statusDot.classList.remove('connected');
+                    statusText.textContent = 'Error: ' + (errData.error?.message || 'Key Inválida');
+                    if (response.status === 402 || response.status === 401) {
+                        document.getElementById('creditAlert').style.display = 'block';
+                    }
+                }
+            } catch (e) {
+                statusDot.classList.remove('connected');
+                statusText.textContent = 'Error de Red';
             }
         }
 
