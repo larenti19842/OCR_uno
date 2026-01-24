@@ -383,31 +383,33 @@ def process_invoice():
                             if chunk.get('done', False): break
                         except: continue
             
-            # Limpiar y evaluar math antes de enviar resultado final
-            # Intentar extraer bloque JSON si existe
-            json_match = re.search(r'```json\s*(\{.*?\})\s*```', full_response, re.DOTALL)
-            if not json_match: json_match = re.search(r'```\s*(\{.*?\})\s*```', full_response, re.DOTALL)
+            # --- LIMPIEZA AGRESIVA DE JSON ---
+            # 1. Quitar caracteres de control invisibles que rompen json.loads
+            full_clean = "".join(char for char in full_response if char.isprintable() or char in "\n\r\t")
             
-            clean_json = full_response
+            # 2. Intentar extraer bloque JSON si existe (varias formas de markdown)
+            json_match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', full_clean, re.DOTALL)
             if json_match:
                 clean_json = json_match.group(1)
             else:
                 # Buscar el primer { y el último }
-                start = full_response.find('{')
-                end = full_response.rfind('}')
+                start = full_clean.find('{')
+                end = full_clean.rfind('}')
                 if start != -1 and end != -1:
-                    clean_json = full_response[start:end+1]
+                    clean_json = full_clean[start:end+1]
+                else:
+                    clean_json = full_clean
             
-            # Limpiar posibles comas finales antes de cerrar llaves o corchetes
+            # 3. Limpiar posibles comas finales antes de cerrar llaves o corchetes
             clean_json = re.sub(r',\s*([\}\]])', r'\1', clean_json)
             
+            # 4. Math Eval Protection (CUITs and dates)
             def eval_math_expr(match):
                 expr = match.group(1).strip()
-                # NO evaluar si parece un CUIT (ej: 20-12345678-9) o una fecha (ej: 2024-12-01)
+                # NO considerar CUIT o Fechas como operaciones de resta
                 if re.match(r'^\d+-\d+(-\d+)*$', expr):
-                    return f'"{expr}"' # Asegurar que es string
+                    return f'"{expr}"'
                 try:
-                    # Solo evaluar si contiene operadores matemáticos
                     if any(op in expr for op in '+*/') or ('-' in expr and not re.match(r'^\d+-\d+', expr)):
                         if re.match(r'^[\d\s\+\-\*\/\.\(\)]+$', expr):
                             result = eval(expr, {"__builtins__": {}}, {})
@@ -415,17 +417,16 @@ def process_invoice():
                 except: pass
                 return '"' + expr + '"' if not expr.startswith('"') else expr
                 
-            # Procesar valores que parecen fórmulas (evitando dañar strings ya entrecomillados)
-            # Buscamos : seguido de algo que no empieza con " y tiene signos matemáticos
             clean_json = re.sub(r':\s*([\d\.\s\+\-\*\/\(\)]+(?:\s*[\+\-\*\/]\s*[\d\.\s\+\-\*\/\(\)]+)+)', 
                                lambda m: ': ' + eval_math_expr(m), clean_json)
             
             try: 
                 output_data = json.loads(clean_json.strip())
             except Exception as e:
-                print(f"JSON Parse Error: {e}")
-                print(f"Clean JSON attempted: {clean_json}")
-                output_data = {"error": "Respuesta malformada", "raw": full_response, "clean_attempt": clean_json}
+                # Loggear error específico para diagnóstico en consola del servidor
+                print(f"!!! FATAL PARSE ERROR: {e}")
+                print(f"!!! CLEAN ATTEMPT: {clean_json}")
+                output_data = {"error": "Respuesta malformada", "raw": full_response, "clean_attempt": clean_json, "parse_error": str(e)}
             
             yield f"data: {json.dumps({'phase': 'complete', 'message': f'Completado en {round(time.time()-start_time,1)}s', 'tokens': token_count, 'elapsed': round(time.time()-start_time,1), 'result': output_data, 'processed_image': processed_b64})}\n\n"
         except Exception as e:

@@ -1298,8 +1298,29 @@
             if (data.error) {
                 // Si hay un error de parseo
                 addLog(`Error de extracción: ${data.error}`, 'error');
-                if (data.raw) {
-                    addLog(`Respuesta cruda del modelo:\n${data.raw}`, 'info');
+
+                // Mostrar el bloque de JSON crudo ante error
+                const details = document.querySelector('details');
+                if (details) {
+                    details.style.display = 'block';
+                    details.open = true;
+                }
+
+                // Agregar botón de copia para diagnóstico si no existe
+                if (!document.getElementById('copyDebugBtn')) {
+                    const copyBtn = document.createElement('button');
+                    copyBtn.id = 'copyDebugBtn';
+                    copyBtn.innerHTML = '📋 Copiar Log de Error';
+                    copyBtn.style.marginTop = '1rem';
+                    copyBtn.className = 'secondary';
+                    copyBtn.onclick = () => {
+                        const logData = JSON.stringify(data, null, 2);
+                        navigator.clipboard.writeText(logData).then(() => {
+                            copyBtn.innerHTML = '✅ ¡Copiado!';
+                            setTimeout(() => copyBtn.innerHTML = '📋 Copiar Log de Error', 3000);
+                        });
+                    };
+                    document.getElementById('successBanner').parentElement.appendChild(copyBtn);
                 }
 
                 document.getElementById('successBanner').style.background = 'rgba(239, 68, 68, 0.2)';
@@ -1308,7 +1329,7 @@
                 document.getElementById('successBanner').querySelector('.text').style.color = '#ef4444';
                 document.getElementById('successBanner').querySelector('.icon').textContent = '❌';
                 document.getElementById('comprobanteCard').style.display = 'none';
-                itemsTableBody.innerHTML = '<tr><td colspan="5" style="text-align:center">No se pudieron extraer los ítems</td></tr>';
+                itemsTableBody.innerHTML = '<tr><td colspan="5" style="text-align:center">No se pudieron extraer los ítems. Prueba con otro modelo o revisa los logs.</td></tr>';
                 return;
             }
 
