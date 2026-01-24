@@ -10,20 +10,21 @@ services:
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
       - OCR_PROVIDER=${OCR_PROVIDER:-openrouter}
       - OCR_MODEL=${OCR_MODEL:-qwen/qwen-2.5-vl-7b-instruct:free}
-    labels:
-      - "traefik.enable=true"
-      # Usar el nombre del servicio definido arriba para que los labels enganchen
-      - "traefik.http.routers.ocr-app.rule=Host(`larentiapi.duckdns.org`)"
-      - "traefik.http.routers.ocr-app.entrypoints=websecure"
-      - "traefik.http.routers.ocr-app.tls=true"
-      - "traefik.http.routers.ocr-app.tls.certresolver=letsencrypt"
-      # Aumentar timeouts del Load Balancer
-      - "traefik.http.services.ocr-app.loadbalancer.server.timeout=600s"
-      # Desbloquear buffering para que los heartbeats lleguen al instante
-      - "traefik.http.middlewares.ocr-buffering.buffering.retryExpression=IsNetworkError() && ResponseCode() == 502"
-      - "traefik.http.routers.ocr-app.middlewares=ocr-buffering"
     deploy:
       replicas: 2
+      labels:
+        - "traefik.enable=true"
+        - "traefik.http.routers.ocr-app.rule=Host(`larentiapi.duckdns.org`)"
+        - "traefik.http.routers.ocr-app.entrypoints=websecure"
+        - "traefik.http.routers.ocr-app.tls=true"
+        - "traefik.http.routers.ocr-app.tls.certresolver=letsencrypt"
+        - "traefik.http.routers.ocr-app.service=ocr-app-service"
+        # Aumentar timeouts del Load Balancer (nivel Swarm)
+        - "traefik.http.services.ocr-app-service.loadbalancer.server.port=5000"
+        - "traefik.http.services.ocr-app-service.loadbalancer.server.timeout=600s"
+        # Middleware para evitar buffering y permitir heartbeats inmediatos
+        - "traefik.http.middlewares.ocr-buffering.buffering.retryExpression=IsNetworkError() && ResponseCode() == 502"
+        - "traefik.http.routers.ocr-app.middlewares=ocr-buffering"
       restart_policy:
         condition: on-failure
         delay: 5s
