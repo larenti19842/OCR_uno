@@ -344,21 +344,24 @@ def process_invoice():
 
                 line_count = 0
                 last_update = time.time()
+                
+                # Log de control
+                print(f"DEBUG - Connection established. Status: {response.status_code}")
+                print(f"DEBUG - Headers: {dict(response.headers)}")
+
                 for line in response.iter_lines():
                     if line:
                         line_count += 1
                         line_str = line.decode('utf-8')
                         
-                        # Log ultra-verbose el inicio del stream
-                        if line_count <= 5:
-                            print(f"DEBUG - Raw line {line_count}: {line_str[:150]}")
+                        if line_count <= 3:
+                            print(f"DEBUG - Raw line {line_count}: {line_str[:100]}")
                             
                         if line_str.startswith('data: '):
                             data_str = line_str[6:]
                             if data_str.strip() == '[DONE]': break
                             try:
                                 chunk = json.loads(data_str)
-                                
                                 content = ""
                                 if 'choices' in chunk and len(chunk['choices']) > 0:
                                     choice = chunk['choices'][0]
@@ -370,18 +373,26 @@ def process_invoice():
                                 if content:
                                     full_response += content
                                     token_count += 1
-                                    
                                     if time.time() - last_update >= 0.5:
                                         elapsed = round(time.time() - start_time, 1)
                                         yield f"data: {json.dumps({'phase': 'generating', 'message': 'Generando...', 'tokens': token_count, 'tokens_per_sec': round(token_count/elapsed, 1), 'elapsed': elapsed})}\n\n"
                                         last_update = time.time()
                             except Exception as e:
-                                if line_count <= 10:
-                                    print(f"DEBUG - Parse Error: {e} | Line: {line_str[:100]}")
                                 continue
                 
+                # FALLBACK: Si el stream terminó pero no capturamos nada, intentar leer como texto plano
                 if not full_response:
-                    print(f"DEBUG - Stream finished but full_response is EMPTY. Total lines: {line_count}")
+                    print(f"DEBUG - Stream empty. Attempting fallback read...")
+                    try:
+                        # Si es un error de OpenRouter que no vino por SSE
+                        fallback_data = response.text
+                        print(f"DEBUG - Fallback data length: {len(fallback_data)}")
+                        if fallback_data and not fallback_data.startswith('data: '):
+                            full_response = fallback_data
+                    except:
+                        pass
+                
+                print(f"DEBUG - Stream finished. Total lines: {line_count} | Total content length: {len(full_response)}")
             else:
                 payload = {
                     "model": model, "prompt": prompt, "stream": True, "images": [processed_b64], "format": "json",
