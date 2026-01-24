@@ -10,6 +10,13 @@ services:
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
       - OCR_PROVIDER=${OCR_PROVIDER:-openrouter}
       - OCR_MODEL=${OCR_MODEL:-qwen/qwen-2.5-vl-7b-instruct:free}
+    labels:
+      - "traefik.enable=true"
+      # Aumentar el timeout de respuesta del servidor (clave para OCR largo)
+      - "traefik.http.services.ocr-app-service.loadbalancer.server.timeout=600s"
+      # Asegurar que Traefik no corte la conexión de streaming
+      - "traefik.http.middlewares.ocr-timeout.forwardingtimeout=600s"
+      - "traefik.http.routers.ocr-app-router.middlewares=ocr-timeout"
     deploy:
       replicas: 2
       restart_policy:
