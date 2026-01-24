@@ -4,8 +4,8 @@ WORKDIR /app
 
 # Install system dependencies for Pillow if needed (usually slim-bullseye has them)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl \
-    && rm -rf /var/lib/apt/lists/*
+  curl \
+  && rm -rf /var/lib/apt/lists/*
 
 # Install python dependencies
 COPY requirements.txt .
@@ -25,7 +25,7 @@ EXPOSE 5000
 
 # Healthcheck to verify the service is up
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-  CMD curl -f http://localhost:5000/ || exit 1
+  CMD curl -f http://localhost:5000/health || exit 1
 
 # Run with Gunicorn (2 workers for basic concurrency within each replica)
 CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "2", "--timeout", "120", "--access-logfile", "-", "app:app"]

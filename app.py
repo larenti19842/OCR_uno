@@ -146,6 +146,10 @@ def get_extraction_prompt():
     }
     """
 
+@app.route('/health')
+def health():
+    return jsonify({"status": "ok", "service": "OCR Invoice Pro"})
+
 @app.route('/')
 def index():
     return send_from_directory('.', 'index.html')
